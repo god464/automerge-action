@@ -2,9 +2,9 @@ version: 2
 jobs:
   build:
     docker:
-      - image: cimg/node:20.10.0
+      - image: cimg/node:24.10.0
     steps:
       - checkout
       - run:
-          name: yarn
-          command: yarn
+          name: pnpm
+          command: pnpm install --frozen-lockfile

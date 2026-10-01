@@ -29,7 +29,7 @@ After the pull request has been merged successfully, the branch will _not_ be
 deleted. To delete branches after they are merged,
 see [automatic deletion of branches](https://help.github.com/en/articles/managing-the-automatic-deletion-of-branches).
 
-----
+---
 
 **This functionality is now available directly in GitHub as [auto-merge](https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/automatically-merging-a-pull-request).** Note that GitHub does not currently support auto-rebasing pull requests. The automerge-action project will still be maintained, but users are encouraged to switch to auto-merge for simple workflows, as it offers a faster and more stable experience.
 
@@ -66,9 +66,9 @@ jobs:
     steps:
       - id: automerge
         name: automerge
-        uses: "pascalgn/automerge-action@v0.16.4"
+        uses: 'pascalgn/automerge-action@v0.16.4'
         env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
 ```
 
 For the latest version, see the [list of releases](https://github.com/pascalgn/automerge-action/releases).
@@ -221,38 +221,38 @@ Also, the following general options are supported:
 You can configure the environment variables in the workflow file like this:
 
 ```yaml
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          MERGE_LABELS: "automerge,!work in progress"
-          MERGE_REMOVE_LABELS: "automerge"
-          MERGE_METHOD: "squash"
-          MERGE_COMMIT_MESSAGE: "pull-request-description"
-          MERGE_FORKS: "false"
-          MERGE_RETRIES: "6"
-          MERGE_RETRY_SLEEP: "10000"
-          MERGE_REQUIRED_APPROVALS: "0"
-          UPDATE_LABELS: ""
-          UPDATE_METHOD: "rebase"
-          PULL_REQUEST: "1234"
-          MAX_PR_COUNT: "25"
+env:
+  GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+  MERGE_LABELS: 'automerge,!work in progress'
+  MERGE_REMOVE_LABELS: 'automerge'
+  MERGE_METHOD: 'squash'
+  MERGE_COMMIT_MESSAGE: 'pull-request-description'
+  MERGE_FORKS: 'false'
+  MERGE_RETRIES: '6'
+  MERGE_RETRY_SLEEP: '10000'
+  MERGE_REQUIRED_APPROVALS: '0'
+  UPDATE_LABELS: ''
+  UPDATE_METHOD: 'rebase'
+  PULL_REQUEST: '1234'
+  MAX_PR_COUNT: '25'
 ```
 
 ## Supported Events
 
 Automerge can be configured to run for these events:
 
-* `check_run`
-* `check_suite`
-* `issue_comment`
-* `pull_request_review`
-* `pull_request_target`
-* `pull_request`
-* `push`
-* `repository_dispatch`
-* `schedule`
-* `status`
-* `workflow_dispatch`
-* `workflow_run`
+- `check_run`
+- `check_suite`
+- `issue_comment`
+- `pull_request_review`
+- `pull_request_target`
+- `pull_request`
+- `push`
+- `repository_dispatch`
+- `schedule`
+- `status`
+- `workflow_dispatch`
+- `workflow_run`
 
 For more information on when these occur, see the Github documentation on [events that trigger workflows](https://docs.github.com/en/actions/reference/events-that-trigger-workflows) and [their payloads](https://docs.github.com/en/developers/webhooks-and-events/webhook-events-and-payloads).
 
@@ -260,8 +260,8 @@ For more information on when these occur, see the Github documentation on [event
 
 The action will provide two [outputs](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idoutputs):
 
-* `mergeResult` - The result from the action run, one of `skipped`, `not_ready`, `author_filtered`, `merge_failed`, `merged`
-* `pullRequestNumber` - The pull request number (or `0`, if no pull request was affected)
+- `mergeResult` - The result from the action run, one of `skipped`, `not_ready`, `author_filtered`, `merge_failed`, `merged`
+- `pullRequestNumber` - The pull request number (or `0`, if no pull request was affected)
 
 Please note:
 
@@ -272,16 +272,16 @@ Please note:
 Example usage:
 
 ```yaml
-    steps:
-      - id: automerge
-        name: automerge
-        uses: "pascalgn/automerge-action@v0.15.6"
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-      - name: feedback
-        if: ${{ steps.automerge.outputs.mergeResult == 'merged' }}
-        run: |
-          echo "Pull request ${{ steps.automerge.outputs.pullRequestNumber }} merged!"
+steps:
+  - id: automerge
+    name: automerge
+    uses: 'pascalgn/automerge-action@v0.15.6'
+    env:
+      GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+  - name: feedback
+    if: ${{ steps.automerge.outputs.mergeResult == 'merged' }}
+    run: |
+      echo "Pull request ${{ steps.automerge.outputs.pullRequestNumber }} merged!"
 ```
 
 ## Limitations
@@ -299,11 +299,11 @@ Example usage:
 To run the action with full debug logging, update your workflow file as follows:
 
 ```yaml
-      - name: automerge
-        uses: pascalgn/automerge-action@...
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          LOG: "TRACE"  # or "DEBUG"
+- name: automerge
+  uses: pascalgn/automerge-action@...
+  env:
+    GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+    LOG: 'TRACE' # or "DEBUG"
 ```
 
 If you need to further debug the action, you can run it locally.
@@ -317,7 +317,7 @@ GITHUB_TOKEN="123abc..."
 URL="https://github.com/pascalgn/repository-name/pull/123"
 ```
 
-Install dependencies with `yarn`, and finally run `yarn it` (or `npm run it`).
+Install dependencies with `pnpm`, and finally run `pnpm run it`.
 
 ## License
 

@@ -1,0 +1,109 @@
+import fse from 'fs-extra';
+import { expect, test } from 'vitest';
+
+import * as git from '../lib/git';
+import { tmpdir } from '../lib/common';
+
+async function init(dir: string): Promise<void> {
+  await fse.mkdirs(dir);
+  await git.git(dir, 'init');
+  await git.git(dir, 'checkout', '-b', 'main');
+}
+
+async function commit(dir: string, message = 'C%d', count = 1): Promise<void> {
+  for (let i = 1; i <= count; i++) {
+    await git.git(dir, 'commit', '--allow-empty', '-m', message.replace(/%d/g, String(i)));
+  }
+}
+
+test('clone creates the target directory', async () => {
+  await tmpdir(async (path) => {
+    await init(`${path}/origin`);
+    await commit(`${path}/origin`);
+    await git.clone(`${path}/origin`, `${path}/ws`, 'main');
+    expect(await fse.exists(`${path}/ws`)).toBe(true);
+  });
+});
+
+test('fetchUntilMergeBase finds the correct merge base', async () => {
+  await tmpdir(async (path) => {
+    const origin = `${path}/origin`;
+    await init(origin);
+    await commit(origin, 'base %d', 10);
+    const base = await git.head(origin);
+    await git.git(origin, 'checkout', '-b', 'br1');
+    await commit(origin, 'br1 %d', 20);
+    await git.git(origin, 'checkout', 'main');
+    await commit(origin, 'main %d', 20);
+
+    const ws = `${path}/ws`;
+    await git.clone(`${path}/origin`, ws, 'br1');
+    await git.fetch(ws, 'main');
+    expect(await git.fetchUntilMergeBase(ws, 'main', 10000)).toBe(base);
+  });
+}, 15000);
+
+test('fetchUntilMergeBase finds the earliest merge base 1', async () => {
+  await tmpdir(async (path) => {
+    const origin = `${path}/origin`;
+    await init(origin);
+    await commit(origin, 'base %d', 10);
+    const base = await git.head(origin);
+    await git.git(origin, 'branch', 'br1');
+    await commit(origin, 'main %d', 10);
+    await git.git(origin, 'checkout', 'br1');
+    await commit(origin, 'br1 before merge %d', 5);
+    await git.git(origin, 'merge', '--no-ff', 'main');
+    await commit(origin, 'br1 after merge %d', 10);
+    await git.git(origin, 'checkout', 'main');
+    await commit(origin, 'main after merge %d', 10);
+
+    const ws = `${path}/ws`;
+    await git.clone(`${path}/origin`, ws, 'br1');
+    await git.fetch(ws, 'main');
+    expect(await git.fetchUntilMergeBase(ws, 'main', 10000)).toBe(base);
+  });
+}, 15000);
+
+test('fetchUntilMergeBase finds the earliest merge base 2', async () => {
+  await tmpdir(async (path) => {
+    const origin = `${path}/origin`;
+    await init(origin);
+    await commit(origin, 'base a%d', 5);
+    const base = await git.head(origin);
+    await commit(origin, 'base b%d', 5);
+    await git.git(origin, 'branch', 'br1');
+    await commit(origin, 'main %d', 10);
+    await git.git(origin, 'checkout', 'br1');
+    await commit(origin, 'br1 before merge %d', 5);
+    await git.git(origin, 'merge', '--no-ff', 'main');
+    await commit(origin, 'br1 after merge %d', 10);
+    await git.git(origin, 'checkout', 'main');
+    await commit(origin, 'main after merge %d', 10);
+    await git.git(origin, 'checkout', '-b', 'br2', base);
+    await commit(origin, 'br2');
+    await git.git(origin, 'checkout', 'br1');
+    await git.git(origin, 'merge', '--no-ff', 'br2');
+
+    const ws = `${path}/ws`;
+    await git.clone(`${path}/origin`, ws, 'br1');
+    await git.fetch(ws, 'main');
+    expect(await git.fetchUntilMergeBase(ws, 'main', 10000)).toBe(base);
+  });
+}, 15000);
+
+test('mergeCommits returns the correct commits', async () => {
+  await tmpdir(async (path) => {
+    await init(path);
+    await commit(path, 'main %d', 2);
+    const head1 = await git.head(path);
+    await git.git(path, 'checkout', '-b', 'branch', 'HEAD^');
+    const head2 = await git.head(path);
+    await git.git(path, 'merge', '--no-ff', 'main');
+
+    const commits = await git.mergeCommits(path, 'HEAD^');
+    expect(commits).toHaveLength(1);
+    expect(commits[0][0]).toBe(head2);
+    expect(commits[0][1]).toBe(head1);
+  });
+});
