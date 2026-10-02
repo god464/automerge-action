@@ -102,7 +102,7 @@ function checkOldConfig(): void {
 
 function env(name: string): string {
   const val = process.env[name];
-  if (!val || !val.length) {
+  if (!val) {
     throw new ClientError(`environment variable ${name} not set!`);
   }
   return val;

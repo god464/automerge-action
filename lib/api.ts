@@ -104,24 +104,31 @@ async function executeGitHubActionImpl(
 
   if (context.config.pullRequest != null) {
     return await handleArbitraryPullRequestUpdate(context, eventData);
-  } else if (['push'].includes(eventName)) {
-    await handleBaseBranchUpdate(context, eventName, eventData);
-  } else if (['status'].includes(eventName)) {
-    return await handleStatusUpdate(context, eventName, eventData);
-  } else if (['pull_request', 'pull_request_target'].includes(eventName)) {
-    return await handlePullRequestUpdate(context, eventName, eventData);
-  } else if (['check_suite', 'check_run', 'workflow_run'].includes(eventName)) {
-    return await handleCheckOrWorkflowUpdate(context, eventName, eventData);
-  } else if (['pull_request_review'].includes(eventName)) {
-    return await handlePullRequestReviewUpdate(context, eventName, eventData);
-  } else if (['schedule', 'repository_dispatch'].includes(eventName)) {
-    return await handleScheduleTriggerOrRepositoryDispatch(context);
-  } else if (['issue_comment'].includes(eventName)) {
-    return await handleIssueComment(context, eventName, eventData);
-  } else if (['workflow_dispatch'].includes(eventName)) {
-    return await handleWorkflowDispatch(context, eventName, eventData);
-  } else {
-    throw new ClientError(`invalid event type: ${eventName}`);
+  }
+
+  switch (eventName) {
+    case 'push':
+      return await handleBaseBranchUpdate(context, eventName, eventData);
+    case 'status':
+      return await handleStatusUpdate(context, eventName, eventData);
+    case 'pull_request':
+    case 'pull_request_target':
+      return await handlePullRequestUpdate(context, eventName, eventData);
+    case 'check_suite':
+    case 'check_run':
+    case 'workflow_run':
+      return await handleCheckOrWorkflowUpdate(context, eventName, eventData);
+    case 'pull_request_review':
+      return await handlePullRequestReviewUpdate(context, eventName, eventData);
+    case 'schedule':
+    case 'repository_dispatch':
+      return await handleScheduleTriggerOrRepositoryDispatch(context);
+    case 'issue_comment':
+      return await handleIssueComment(context, eventName, eventData);
+    case 'workflow_dispatch':
+      return await handleWorkflowDispatch(context, eventName, eventData);
+    default:
+      throw new ClientError(`invalid event type: ${eventName}`);
   }
 }
 
@@ -203,14 +210,13 @@ async function handleCheckOrWorkflowUpdate(
     logger.trace('PR:', pullRequest);
 
     return updateAndMerge(context, pullRequest as unknown as PullRequest);
-  } else {
-    const branchName = payload.head_branch;
-    if (branchName != null) {
-      return await checkPullRequestsForBranches(context, event, branchName);
-    } else {
-      return await checkPullRequestsForHeadSha(context, event.repository!, payload.head_sha!);
-    }
   }
+
+  const branchName = payload.head_branch;
+  if (branchName != null) {
+    return await checkPullRequestsForBranches(context, event, branchName);
+  }
+  return await checkPullRequestsForHeadSha(context, event.repository!, payload.head_sha!);
 }
 
 async function handlePullRequestReviewUpdate(
@@ -260,6 +266,25 @@ async function handleStatusUpdate(
   return results;
 }
 
+async function updateAndMergeAll(
+  context: Context,
+  pullRequests: PullRequest[],
+): Promise<ActionResult[]> {
+  const results: ActionResult[] = [];
+  for (const pullRequest of pullRequests) {
+    try {
+      results.push(await updateAndMerge(context, pullRequest));
+    } catch (e) {
+      logger.error(e);
+    }
+  }
+
+  if (results.length === 0) {
+    logger.info('No PRs have been updated/merged');
+  }
+  return results;
+}
+
 async function checkPullRequestsForBranches(
   context: Context,
   event: EventData,
@@ -279,22 +304,7 @@ async function checkPullRequestsForBranches(
 
   logger.trace('PR list:', pullRequests);
 
-  let updated = 0;
-  const results: ActionResult[] = [];
-  for (const pullRequest of pullRequests) {
-    try {
-      const result = await updateAndMerge(context, pullRequest as unknown as PullRequest);
-      results.push(result);
-      ++updated;
-    } catch (e) {
-      logger.error(e);
-    }
-  }
-
-  if (updated === 0) {
-    logger.info('No PRs have been updated/merged');
-  }
-  return results;
+  return await updateAndMergeAll(context, pullRequests as unknown as PullRequest[]);
 }
 
 async function checkPullRequestsForHeadSha(
@@ -313,27 +323,12 @@ async function checkPullRequestsForHeadSha(
     per_page: MAX_PR_COUNT,
   });
 
-  let updated = 0;
-  let foundPR = false;
-  const results: ActionResult[] = [];
-  for (const pullRequest of pullRequests) {
-    if (pullRequest.head.sha !== head_sha) {
-      continue;
-    }
-    foundPR = true;
-    try {
-      const result = await updateAndMerge(context, pullRequest as unknown as PullRequest);
-      results.push(result);
-      ++updated;
-    } catch (e) {
-      logger.error(e);
-    }
-  }
+  const matching = (pullRequests as unknown as PullRequest[]).filter(
+    (pullRequest) => pullRequest.head.sha === head_sha,
+  );
+  const results = await updateAndMergeAll(context, matching);
 
-  if (updated === 0) {
-    logger.info('No PRs have been updated/merged');
-  }
-  if (!foundPR) {
+  if (matching.length === 0) {
     logger.info(
       'Could not find branch name in this status check result' +
         ' or corresponding PR from a forked repository',
@@ -436,22 +431,7 @@ async function handleScheduleTriggerOrRepositoryDispatch(
 
   logger.trace('PR list:', pullRequests);
 
-  let updated = 0;
-  const results: ActionResult[] = [];
-  for (const pullRequest of pullRequests) {
-    try {
-      const result = await updateAndMerge(context, pullRequest as unknown as PullRequest);
-      results.push(result);
-      ++updated;
-    } catch (e) {
-      logger.error(e);
-    }
-  }
-
-  if (updated === 0) {
-    logger.info('No PRs have been updated/merged');
-  }
-  return results;
+  return await updateAndMergeAll(context, pullRequests as unknown as PullRequest[]);
 }
 
 async function handleIssueComment(

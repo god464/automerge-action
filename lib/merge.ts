@@ -215,9 +215,9 @@ function skipPullRequest(
 
   const labels = pullRequest.labels.map((label) => label.name);
 
-  for (const label of pullRequest.labels) {
-    if (mergeLabels.blocking.includes(label.name)) {
-      logger.info('Skipping PR merge, blocking label present:', label.name);
+  for (const label of labels) {
+    if (mergeLabels.blocking.includes(label)) {
+      logger.info('Skipping PR merge, blocking label present:', label);
       skip = true;
     }
   }

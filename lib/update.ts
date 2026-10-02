@@ -1,6 +1,5 @@
 import { logger, tmpdir, sleep } from './common.js';
-import type { Context } from './types.js';
-import type { PullRequest } from './types.js';
+import type { Context, PullRequest } from './types.js';
 import type { Octokit } from '@octokit/rest';
 import * as git from './git.js';
 
@@ -60,9 +59,9 @@ function skipPullRequest(context: Context, pullRequest: PullRequest): boolean {
 
   const labels = pullRequest.labels.map((label) => label.name);
 
-  for (const label of pullRequest.labels) {
-    if (updateLabels.blocking.includes(label.name)) {
-      logger.info('Skipping PR update, blocking label present:', label.name);
+  for (const label of labels) {
+    if (updateLabels.blocking.includes(label)) {
+      logger.info('Skipping PR update, blocking label present:', label);
       skip = true;
     }
   }

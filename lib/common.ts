@@ -111,14 +111,13 @@ export function createConfig(env: ConfigEnv = {}): Config {
     const val = env[name];
     if (val == null || val === '') {
       return defaultValue;
-    } else {
-      const number = parseInt(String(val), 10);
-      if (isNaN(number) || number < 0) {
-        throw new ClientError(`Not a positive integer: ${val}`);
-      } else {
-        return number;
-      }
     }
+
+    const number = parseInt(String(val), 10);
+    if (isNaN(number) || number < 0) {
+      throw new ClientError(`Not a positive integer: ${val}`);
+    }
+    return number;
   }
 
   function parsePullRequest(pullRequest: string | number | undefined): PullRequestInput | null {
