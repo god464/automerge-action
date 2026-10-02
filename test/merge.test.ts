@@ -1,10 +1,10 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
-import { merge } from '../lib/merge';
-import { createConfig } from '../lib/common';
-import type { MergeContext } from '../lib/types';
-import { pullRequest } from './common';
+import { merge } from '../lib/merge.js';
+import { createConfig } from '../lib/common.js';
+import type { MergeContext } from '../lib/types.js';
+import { pullRequest } from './common.js';
 
 interface MockOctokit {
   pulls: { merge: Mock; get: () => void };

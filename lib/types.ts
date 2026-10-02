@@ -96,9 +96,9 @@ export interface ActionResult {
 }
 
 /**
- * Sink for GitHub Actions step outputs. Injected so that the library does not
- * depend on `@actions/core` (ESM-only) at module load time, which would make it
- * unloadable from CommonJS dev entry points.
+ * Sink for GitHub Actions step outputs. Injected so that the library stays
+ * decoupled from the Actions runtime (only the entry points import
+ * `@actions/core`) and outputs can be stubbed in tests.
  */
 export interface ActionOutputs {
   setOutput(name: string, value: unknown): void;

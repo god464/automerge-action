@@ -1,8 +1,8 @@
 import fse from 'fs-extra';
 import { expect, test } from 'vitest';
 
-import * as git from '../lib/git';
-import { tmpdir } from '../lib/common';
+import * as git from '../lib/git.js';
+import { tmpdir } from '../lib/common.js';
 
 async function init(dir: string): Promise<void> {
   await fse.mkdirs(dir);

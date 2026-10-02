@@ -4,7 +4,13 @@ import process from 'node:process';
 import fse from 'fs-extra';
 import tmp from 'tmp';
 
-import type { Config, ConfigEnv, LabelFilter, MergeMethodLabel, PullRequestInput } from './types';
+import type {
+  Config,
+  ConfigEnv,
+  LabelFilter,
+  MergeMethodLabel,
+  PullRequestInput,
+} from './types.js';
 
 export const RESULT_SKIPPED = 'skipped';
 export const RESULT_NOT_READY = 'not_ready';

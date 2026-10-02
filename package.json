@@ -5,6 +5,7 @@
   "description": "GitHub action to automatically merge pull requests",
   "license": "MIT",
   "author": "Pascal",
+  "type": "module",
   "scripts": {
     "it": "tsx it/it.ts",
     "test": "vitest run",

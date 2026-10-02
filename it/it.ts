@@ -1,9 +1,10 @@
+import { setOutput } from '@actions/core';
 import { Octokit } from '@octokit/rest';
 import { config as loadEnv } from 'dotenv';
 
-import { executeLocally } from '../lib/api';
-import { createConfig } from '../lib/common';
-import type { Context } from '../lib/types';
+import { executeLocally } from '../lib/api.js';
+import { createConfig } from '../lib/common.js';
+import type { Context } from '../lib/types.js';
 
 async function main(): Promise<void> {
   loadEnv();
@@ -32,10 +33,6 @@ async function main(): Promise<void> {
   if (!url) {
     throw new Error('environment variable URL not set!');
   }
-
-  // `@actions/core` is ESM-only while this script runs as CommonJS under `tsx`,
-  // so a static import cannot resolve; load it on demand instead.
-  const { setOutput } = await import('@actions/core');
 
   await executeLocally(context, url, { setOutput });
 }

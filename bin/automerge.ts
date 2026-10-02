@@ -7,9 +7,9 @@ import { ArgumentParser } from 'argparse';
 import { Octokit } from '@octokit/rest';
 import { setOutput } from '@actions/core';
 
-import { ClientError, logger, createConfig } from '../lib/common';
-import { executeLocally, executeGitHubAction } from '../lib/api';
-import type { ActionOutputs, Context, EventData } from '../lib/types';
+import { ClientError, logger, createConfig } from '../lib/common.js';
+import { executeLocally, executeGitHubAction } from '../lib/api.js';
+import type { ActionOutputs, Context, EventData } from '../lib/types.js';
 
 import pkg from '../package.json';
 

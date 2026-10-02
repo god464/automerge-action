@@ -1,10 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
-import * as api from '../lib/api';
-import { createConfig } from '../lib/common';
-import type { Context, EventData, PullRequest } from '../lib/types';
-import { pullRequest } from './common';
+import * as api from '../lib/api.js';
+import { createConfig } from '../lib/common.js';
+import type { Context, EventData, PullRequest } from '../lib/types.js';
+import { pullRequest } from './common.js';
 
 interface MockOctokit {
   pulls: { list: Mock; merge: Mock; listReviews: Mock | symbol };

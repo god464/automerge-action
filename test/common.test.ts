@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { createConfig } from '../lib/common';
+import { createConfig } from '../lib/common.js';
 
 test('createConfig', () => {
   const config = createConfig({

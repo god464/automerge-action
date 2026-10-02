@@ -1,4 +1,4 @@
-import type { PullRequest } from '../lib/types';
+import type { PullRequest } from '../lib/types.js';
 
 export function pullRequest(): PullRequest {
   return {

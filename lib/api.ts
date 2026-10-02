@@ -1,9 +1,9 @@
 import process from 'node:process';
 
-import { ClientError, logger, RESULT_NOT_READY, RESULT_SKIPPED } from './common';
-import { update } from './update';
-import { merge } from './merge';
-import { branchName } from './util';
+import { ClientError, logger, RESULT_NOT_READY, RESULT_SKIPPED } from './common.js';
+import { update } from './update.js';
+import { merge } from './merge.js';
+import { branchName } from './util.js';
 import type {
   ActionOutputs,
   ActionResult,
@@ -13,7 +13,7 @@ import type {
   EventData,
   PullRequest,
   Repository,
-} from './types';
+} from './types.js';
 
 const GITHUB_SERVER_URL = process.env.GITHUB_SERVER_URL || 'https://github.com';
 

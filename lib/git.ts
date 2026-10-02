@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { StdioOptions } from 'node:child_process';
 
-import { TimeoutError, logger } from './common';
+import { TimeoutError, logger } from './common.js';
 
 export class ExitError extends Error {
   code: number | null;
