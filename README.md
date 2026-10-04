@@ -156,8 +156,11 @@ The following merge options are supported:
   after they have been merged. The default value is `"false"`.
 
 - `MERGE_DELETE_BRANCH_FILTER`: A comma-separated list of branches that will not
-  be deleted. This is not the list of GitHub's protected branches, which are never
-  deleted, but an additional list of branches to protect. The default value is `""`.
+  be deleted. This is not the same as GitHub's branch protection: branches that
+  are protected against deletion (by classic branch protection with deletions
+  disabled, or by a ruleset's "Restrict deletions" rule) are never deleted
+  regardless of this option. This option adds a further list of branches to
+  protect. The default value is `""`.
 
 - `MERGE_ERROR_FAIL`: Set this to `"true"` to have the action exit with error code `1`
   when the pull request could not be merged successfully during a run.

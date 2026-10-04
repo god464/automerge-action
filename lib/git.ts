@@ -107,13 +107,21 @@ export async function fetchUntilMergeBase(
         return commonBase;
       }
     }
-    await fetchDeepen(dir);
+    await fetchDeepen(dir, branch);
   }
   throw new TimeoutError();
 }
 
-export async function fetchDeepen(dir: string): Promise<void> {
-  await git(dir, 'fetch', '--quiet', '--deepen', FETCH_DEPTH);
+export async function fetchDeepen(dir: string, branch: string): Promise<void> {
+  await git(
+    dir,
+    'fetch',
+    '--quiet',
+    '--deepen',
+    FETCH_DEPTH,
+    'origin',
+    `${branch}:refs/remotes/origin/${branch}`,
+  );
 }
 
 export async function mergeBase(dir: string, ...refs: string[]): Promise<string | null> {

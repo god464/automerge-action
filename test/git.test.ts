@@ -1,11 +1,13 @@
-import fse from 'fs-extra';
+import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+
 import { expect, test } from 'vitest';
 
 import * as git from '../lib/git.js';
 import { tmpdir } from '../lib/common.js';
 
 async function init(dir: string): Promise<void> {
-  await fse.mkdirs(dir);
+  await mkdir(dir, { recursive: true });
   await git.git(dir, 'init');
   await git.git(dir, 'checkout', '-b', 'main');
 }
@@ -21,7 +23,7 @@ test('clone creates the target directory', async () => {
     await init(`${path}/origin`);
     await commit(`${path}/origin`);
     await git.clone(`${path}/origin`, `${path}/ws`, 'main');
-    expect(await fse.exists(`${path}/ws`)).toBe(true);
+    expect(existsSync(`${path}/ws`)).toBe(true);
   });
 });
 

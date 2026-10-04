@@ -1,8 +1,9 @@
 import util from 'node:util';
 import process from 'node:process';
-
-import fse from 'fs-extra';
-import tmp from 'tmp';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir as osTmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import type {
   Config,
@@ -221,24 +222,13 @@ export function createConfig(env: ConfigEnv = {}): Config {
   };
 }
 
-export function tmpdir<T>(callback: (path: string) => Promise<T>): Promise<T> {
-  async function handle(path: string): Promise<T> {
-    try {
-      return await callback(path);
-    } finally {
-      await fse.remove(path);
-    }
+export async function tmpdir<T>(callback: (path: string) => Promise<T>): Promise<T> {
+  const path = await mkdtemp(join(osTmpdir(), 'automerge-'));
+  try {
+    return await callback(path);
+  } finally {
+    await rm(path, { recursive: true, force: true });
   }
-
-  const { promise, resolve, reject } = Promise.withResolvers<T>();
-  tmp.dir((err, path) => {
-    if (err) {
-      reject(err);
-    } else {
-      handle(path).then(resolve, reject);
-    }
-  });
-  return promise;
 }
 
 export async function retry(
@@ -279,8 +269,4 @@ export async function retry(
   return false;
 }
 
-export function sleep(ms: number): Promise<void> {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  setTimeout(resolve, ms);
-  return promise;
-}
+export { sleep };

@@ -7,7 +7,7 @@ import type { Context, EventData, PullRequest } from '../lib/types.js';
 import { pullRequest } from './common.js';
 
 interface MockOctokit {
-  pulls: { list: Mock; merge: Mock; listReviews: Mock | symbol };
+  pulls: { list: Mock; merge: Mock; listReviews: Mock };
   paginate: Mock;
 }
 
@@ -62,7 +62,7 @@ test('only merge PRs with required approvals', async () => {
       merge: vi.fn<() => void>(() => {
         merged = true;
       }),
-      listReviews: Symbol('listReviews'),
+      listReviews: vi.fn<() => { data: never[] }>(() => ({ data: [] })),
     },
     paginate: vi.fn<() => unknown[]>(() => []),
   };

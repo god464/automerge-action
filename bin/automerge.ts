@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import process from 'node:process';
+import { readFile } from 'node:fs/promises';
 
-import fse from 'fs-extra';
 import { ArgumentParser } from 'argparse';
 import { Octokit } from '@octokit/rest';
 import { setOutput } from '@actions/core';
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
     const eventPath = env('GITHUB_EVENT_PATH');
     const eventName = env('GITHUB_EVENT_NAME');
 
-    const eventDataStr = await fse.readFile(eventPath, 'utf8');
+    const eventDataStr = await readFile(eventPath, 'utf8');
     const eventData = JSON.parse(eventDataStr) as EventData;
 
     await executeGitHubAction(context, eventName, eventData, outputs);

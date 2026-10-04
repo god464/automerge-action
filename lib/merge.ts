@@ -149,33 +149,44 @@ async function deleteBranch(
     return;
   }
 
+  const branch = pullRequest.head.ref;
   const branchQuery = {
     owner: pullRequest.head.repo.owner.login,
     repo: pullRequest.head.repo.name,
-    branch: pullRequest.head.ref,
+    branch,
   };
 
-  const { data: branch } = await octokit.repos.getBranch(branchQuery);
-
-  logger.trace('Branch:', branch);
-
-  if (branch.protected) {
-    const { data: protectionRules } = await octokit.repos.getBranchProtection(branchQuery);
-    if (protectionRules.allow_deletions && !protectionRules.allow_deletions.enabled) {
-      logger.info('Branch is protected and cannot be deleted:', branch.name);
-      return;
-    }
-  } else if (mergeDeleteBranchFilter.includes(branch.name)) {
-    logger.info('Branch is in filter list and will not be deleted:', branch.name);
-  } else {
-    logger.debug('Deleting branch', branch.name, '...');
-    await octokit.git.deleteRef({
-      owner: pullRequest.head.repo.owner.login,
-      repo: pullRequest.head.repo.name,
-      ref: `heads/${branch.name}`,
-    });
-    logger.info('Merged branch has been deleted:', branch.name);
+  if (mergeDeleteBranchFilter.includes(branch)) {
+    logger.info('Branch is in filter list and will not be deleted:', branch);
+    return;
   }
+
+  // Rulesets: a `deletion` rule restricts who may delete the ref.
+  const { data: rules } = await octokit.repos.getBranchRules(branchQuery);
+  logger.trace('Branch rules:', rules);
+  if (rules.some((rule) => rule.type === 'deletion')) {
+    logger.info('Branch is protected by a ruleset and cannot be deleted:', branch);
+    return;
+  }
+
+  // Classic branch protection is a separate mechanism from rulesets; the
+  // endpoint returns 404 when the branch is only covered by rulesets.
+  const protection = await octokit.repos.getBranchProtection(branchQuery).catch((e: unknown) => {
+    logger.debug('No classic branch protection:', (e as Error).message);
+    return null;
+  });
+  if (protection?.data.allow_deletions && !protection.data.allow_deletions.enabled) {
+    logger.info('Branch is protected and cannot be deleted:', branch);
+    return;
+  }
+
+  logger.debug('Deleting branch', branch, '...');
+  await octokit.git.deleteRef({
+    owner: pullRequest.head.repo.owner.login,
+    repo: pullRequest.head.repo.name,
+    ref: `heads/${branch}`,
+  });
+  logger.info('Merged branch has been deleted:', branch);
 }
 
 function skipPullRequest(

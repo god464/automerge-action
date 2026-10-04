@@ -8,6 +8,8 @@ import { pullRequest } from './common.js';
 
 interface MockOctokit {
   pulls: { merge: Mock; get: () => void };
+  repos: { getBranchRules: Mock; getBranchProtection: Mock };
+  git: { deleteRef: Mock };
 }
 
 let octokit: MockOctokit;
@@ -20,8 +22,18 @@ beforeEach(() => {
       merge: vi.fn<(params: { merge_method: string }) => void>(({ merge_method }) => {
         mergeMethod = merge_method;
       }),
-      get: () => {},
+      get: vi.fn<() => void>(),
     },
+    repos: {
+      getBranchRules: vi.fn<() => Promise<{ data: Array<{ type: string }> }>>(async () => ({
+        data: [],
+      })),
+      // ruleset-only branches have no classic branch protection
+      getBranchProtection: vi.fn<() => Promise<unknown>>(async () => {
+        throw new Error('Branch not protected');
+      }),
+    },
+    git: { deleteRef: vi.fn<() => Promise<unknown>>(async () => ({})) },
   };
 });
 
@@ -291,4 +303,76 @@ test('Unmergeable pull request fails action with non-zero exit code', async () =
     'process.exit was called with status code: 1',
   );
   expect(mockExit).toHaveBeenCalledWith(1);
+});
+
+test('MERGE_DELETE_BRANCH does not delete a branch restricted by a ruleset', async () => {
+  // GIVEN
+  const pr = pullRequest();
+  const config = createConfig({ MERGE_DELETE_BRANCH: 'true' });
+  octokit.repos.getBranchRules.mockResolvedValueOnce({ data: [{ type: 'deletion' }] });
+
+  // WHEN
+  expect(await merge({ config, octokit } as unknown as MergeContext, pr, 0)).toEqual('merged');
+
+  // THEN
+  expect(octokit.git.deleteRef).not.toHaveBeenCalled();
+});
+
+test('MERGE_DELETE_BRANCH deletes a branch when no ruleset restricts deletions', async () => {
+  // GIVEN
+  const pr = pullRequest();
+  const config = createConfig({ MERGE_DELETE_BRANCH: 'true' });
+
+  // WHEN
+  expect(await merge({ config, octokit } as unknown as MergeContext, pr, 0)).toEqual('merged');
+
+  // THEN
+  expect(octokit.git.deleteRef).toHaveBeenCalledWith(
+    expect.objectContaining({ ref: 'heads/patch-1' }),
+  );
+});
+
+test('MERGE_DELETE_BRANCH never deletes branches from external repositories', async () => {
+  // GIVEN
+  const pr = pullRequest();
+  pr.head.repo.full_name = 'someone-else/repository';
+  const config = createConfig({ MERGE_DELETE_BRANCH: 'true' });
+
+  // WHEN
+  expect(await merge({ config, octokit } as unknown as MergeContext, pr, 0)).toEqual('merged');
+
+  // THEN
+  expect(octokit.repos.getBranchRules).not.toHaveBeenCalled();
+  expect(octokit.git.deleteRef).not.toHaveBeenCalled();
+});
+
+test('MERGE_DELETE_BRANCH does not delete branches in the filter list', async () => {
+  // GIVEN
+  const pr = pullRequest();
+  const config = createConfig({
+    MERGE_DELETE_BRANCH: 'true',
+    MERGE_DELETE_BRANCH_FILTER: 'other,patch-1',
+  });
+
+  // WHEN
+  expect(await merge({ config, octokit } as unknown as MergeContext, pr, 0)).toEqual('merged');
+
+  // THEN
+  expect(octokit.repos.getBranchRules).not.toHaveBeenCalled();
+  expect(octokit.git.deleteRef).not.toHaveBeenCalled();
+});
+
+test('MERGE_DELETE_BRANCH does not delete a branch protected against deletions', async () => {
+  // GIVEN
+  const pr = pullRequest();
+  const config = createConfig({ MERGE_DELETE_BRANCH: 'true' });
+  octokit.repos.getBranchProtection.mockResolvedValueOnce({
+    data: { allow_deletions: { enabled: false } },
+  });
+
+  // WHEN
+  expect(await merge({ config, octokit } as unknown as MergeContext, pr, 0)).toEqual('merged');
+
+  // THEN
+  expect(octokit.git.deleteRef).not.toHaveBeenCalled();
 });

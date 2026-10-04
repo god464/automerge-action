@@ -505,9 +505,7 @@ async function fetchApprovalReviewCount(
   const approvingReviewers = reviews
     .filter((review) => review.state === 'APPROVED')
     .map((review) => review.user.login);
-  const uniqueApprovingReviewers = approvingReviewers.filter(
-    (login, index) => approvingReviewers.indexOf(login) === index,
-  );
+  const uniqueApprovingReviewers = [...new Set(approvingReviewers)];
 
   logger.trace('Approval reviewers:', uniqueApprovingReviewers);
   return uniqueApprovingReviewers.length;

@@ -1,6 +1,6 @@
 {
   "name": "automerge-action",
-  "version": "0.16.3",
+  "version": "0.16.4",
   "private": true,
   "description": "GitHub action to automatically merge pull requests",
   "license": "MIT",
@@ -19,14 +19,10 @@
     "@actions/core": "^3.0.1",
     "@octokit/rest": "^22.0.1",
     "argparse": "^3.0.2",
-    "fs-extra": "^11.4.1",
-    "object-resolve-path": "^1.1.1",
-    "tmp": "^0.2.7"
+    "object-resolve-path": "^1.1.1"
   },
   "devDependencies": {
-    "@types/fs-extra": "^11.0.4",
-    "@types/node": "^26.6.3",
-    "@types/tmp": "^0.2.6",
+    "@types/node": "^26.6.4",
     "@vercel/ncc": "^0.45.0",
     "dotenv": "^18.0.5",
     "oxfmt": "^0.71.0",
