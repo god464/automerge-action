@@ -1,7 +1,7 @@
-import { logger, tmpdir, sleep } from './common.js';
-import type { Context, PullRequest } from './types.js';
+import { logger, tmpdir, sleep } from './common';
+import type { Context, PullRequest } from './types';
 import type { Octokit } from '@octokit/rest';
-import * as git from './git.js';
+import * as git from './git';
 
 const FETCH_TIMEOUT = 60000;
 

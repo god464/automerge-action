@@ -5,13 +5,7 @@ import { tmpdir as osTmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import type {
-  Config,
-  ConfigEnv,
-  LabelFilter,
-  MergeMethodLabel,
-  PullRequestInput,
-} from './types.js';
+import type { Config, ConfigEnv, LabelFilter, MergeMethodLabel, PullRequestInput } from './types';
 
 export const RESULT_SKIPPED = 'skipped';
 export const RESULT_NOT_READY = 'not_ready';

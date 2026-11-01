@@ -9,14 +9,14 @@ import {
   RESULT_SKIPPED,
   logger,
   retry,
-} from './common.js';
+} from './common';
 import type {
   MergeContext,
   MergeMethod,
   MergeMethodLabel,
   MergeResult,
   PullRequest,
-} from './types.js';
+} from './types';
 
 const NOT_READY = ['dirty', 'draft'];
 
