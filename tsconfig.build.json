@@ -1,5 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": false, "rootDir": ".", "outDir": "build" },
-  "include": ["lib", "bin", "types"]
-}

@@ -1,0 +1,53 @@
+name: Dependabot auto-merge
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: dependabot-merge-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  auto-merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find the Dependabot pull request for this CI run
+        id: pull-request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          number=$(gh pr list \
+            --head "$HEAD_BRANCH" \
+            --state open \
+            --json number,author,headRefOid \
+            --jq ".[] | select(.author.login == \"dependabot[bot]\") | select(.headRefOid == \"$HEAD_SHA\") | .number" \
+            | head -n 1)
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Squash-merge the Dependabot pull request
+        if: steps.pull-request.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --squash "${{ steps.pull-request.outputs.number }}"
+
+      # The merge above uses GITHUB_TOKEN, so its push event does not trigger
+      # release-please. workflow_dispatch is the documented exception.
+      - name: Ask release-please to inspect the new main commit
+        if: steps.pull-request.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run release-please.yml --ref main

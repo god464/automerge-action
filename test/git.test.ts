@@ -1,111 +1,130 @@
-import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { createGitRunner } from '../src/git/command.js';
+import { fetchUntilMergeBase, rebaseOntoBase } from '../src/git/rebase.js';
+import { withTempDir } from '../src/git/tmpdir.js';
+import { ok } from '../src/result.js';
+import { createFakeLogger } from './fakes.js';
+import { expectOk, pullRequest } from './factories.js';
 
-import { expect, test } from 'vitest';
+const logger = createFakeLogger();
+const git = createGitRunner(logger);
 
-import * as git from '../lib/git.js';
-import { tmpdir } from '../lib/common.js';
+async function run(cwd: string, args: readonly string[]): Promise<string> {
+  const result = await git.run(cwd, args);
+  if (!result.ok) {
+    throw new Error(`git ${args.join(' ')} failed: ${JSON.stringify(result.error)}`);
+  }
+  return result.value.stdout;
+}
 
 async function init(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
-  await git.git(dir, 'init');
-  await git.git(dir, 'checkout', '-b', 'main');
+  await run(dir, ['init']);
+  await run(dir, ['checkout', '-b', 'main']);
 }
 
 async function commit(dir: string, message = 'C%d', count = 1): Promise<void> {
-  for (let i = 1; i <= count; i++) {
-    await git.git(dir, 'commit', '--allow-empty', '-m', message.replace(/%d/g, String(i)));
+  for (let index = 1; index <= count; index += 1) {
+    await run(dir, ['commit', '--allow-empty', '-m', message.replace(/%d/g, String(index))]);
   }
 }
 
-test('clone creates the target directory', async () => {
-  await tmpdir(async (path) => {
-    await init(`${path}/origin`);
-    await commit(`${path}/origin`);
-    await git.clone(`${path}/origin`, `${path}/ws`, 'main');
-    expect(existsSync(`${path}/ws`)).toBe(true);
+async function inTempDir<T>(runInDir: (path: string) => Promise<T>): Promise<T> {
+  return expectOk(await withTempDir(async (path) => ok(await runInDir(path))));
+}
+
+describe('fetchUntilMergeBase', () => {
+  it('finds the correct merge base', async () => {
+    await inTempDir(async (path) => {
+      const origin = join(path, 'origin');
+      await init(origin);
+      await commit(origin, 'base %d', 10);
+      const base = await run(origin, ['rev-parse', 'HEAD']);
+      await run(origin, ['checkout', '-b', 'br1']);
+      await commit(origin, 'br1 %d', 20);
+      await run(origin, ['checkout', 'main']);
+      await commit(origin, 'main %d', 20);
+
+      const workspace = join(path, 'ws');
+      await run('.', ['clone', '--branch', 'br1', origin, workspace]);
+      await run(workspace, ['fetch', 'origin', 'main:refs/remotes/origin/main']);
+
+      const deps = { git, logger, now: Date.now, cloneUrl: (repoFullName: string) => repoFullName };
+      expect(await fetchUntilMergeBase(deps, workspace, 'main', 10_000)).toEqual(ok(base));
+    });
+  }, 15_000);
+
+  it('finds the earliest merge base across merge commits', async () => {
+    await inTempDir(async (path) => {
+      const origin = join(path, 'origin');
+      await init(origin);
+      await commit(origin, 'base %d', 10);
+      const base = await run(origin, ['rev-parse', 'HEAD']);
+      await run(origin, ['branch', 'br1']);
+      await commit(origin, 'main %d', 10);
+      await run(origin, ['checkout', 'br1']);
+      await commit(origin, 'br1 before merge %d', 5);
+      await run(origin, ['merge', '--no-ff', 'main']);
+      await commit(origin, 'br1 after merge %d', 10);
+      await run(origin, ['checkout', 'main']);
+      await commit(origin, 'main after merge %d', 10);
+
+      const workspace = join(path, 'ws');
+      await run('.', ['clone', '--branch', 'br1', origin, workspace]);
+      await run(workspace, ['fetch', 'origin', 'main:refs/remotes/origin/main']);
+
+      const deps = { git, logger, now: Date.now, cloneUrl: (repoFullName: string) => repoFullName };
+      expect(await fetchUntilMergeBase(deps, workspace, 'main', 10_000)).toEqual(ok(base));
+    });
+  }, 15_000);
+
+  it('times out when no common base can be found', async () => {
+    const deps = { git, logger, now: Date.now, cloneUrl: (repoFullName: string) => repoFullName };
+
+    expect(await fetchUntilMergeBase(deps, '.', 'main', 0)).toEqual({
+      ok: false,
+      error: { kind: 'timeout' },
+    });
   });
 });
 
-test('fetchUntilMergeBase finds the correct merge base', async () => {
-  await tmpdir(async (path) => {
-    const origin = `${path}/origin`;
-    await init(origin);
-    await commit(origin, 'base %d', 10);
-    const base = await git.head(origin);
-    await git.git(origin, 'checkout', '-b', 'br1');
-    await commit(origin, 'br1 %d', 20);
-    await git.git(origin, 'checkout', 'main');
-    await commit(origin, 'main %d', 20);
+describe('rebaseOntoBase', () => {
+  it('rebases the head branch onto the base and force-pushes it', async () => {
+    await inTempDir(async (path) => {
+      const origin = join(path, 'origin.git');
+      await mkdir(origin, { recursive: true });
+      await run(origin, ['init', '--bare']);
 
-    const ws = `${path}/ws`;
-    await git.clone(`${path}/origin`, ws, 'br1');
-    await git.fetch(ws, 'main');
-    expect(await git.fetchUntilMergeBase(ws, 'main', 10000)).toBe(base);
-  });
-}, 15000);
+      const seed = join(path, 'seed');
+      await run('.', ['clone', origin, seed]);
+      await run(seed, ['checkout', '-b', 'main']);
+      await commit(seed, 'base');
+      await run(seed, ['push', '-u', 'origin', 'main']);
 
-test('fetchUntilMergeBase finds the earliest merge base 1', async () => {
-  await tmpdir(async (path) => {
-    const origin = `${path}/origin`;
-    await init(origin);
-    await commit(origin, 'base %d', 10);
-    const base = await git.head(origin);
-    await git.git(origin, 'branch', 'br1');
-    await commit(origin, 'main %d', 10);
-    await git.git(origin, 'checkout', 'br1');
-    await commit(origin, 'br1 before merge %d', 5);
-    await git.git(origin, 'merge', '--no-ff', 'main');
-    await commit(origin, 'br1 after merge %d', 10);
-    await git.git(origin, 'checkout', 'main');
-    await commit(origin, 'main after merge %d', 10);
+      await run(seed, ['checkout', '-b', 'feature']);
+      await commit(seed, 'feature work');
+      await run(seed, ['push', '-u', 'origin', 'feature']);
+      const featureSha = await run(seed, ['rev-parse', 'HEAD']);
 
-    const ws = `${path}/ws`;
-    await git.clone(`${path}/origin`, ws, 'br1');
-    await git.fetch(ws, 'main');
-    expect(await git.fetchUntilMergeBase(ws, 'main', 10000)).toBe(base);
-  });
-}, 15000);
+      await run(seed, ['checkout', 'main']);
+      await commit(seed, 'main moved');
+      await run(seed, ['push', 'origin', 'main']);
 
-test('fetchUntilMergeBase finds the earliest merge base 2', async () => {
-  await tmpdir(async (path) => {
-    const origin = `${path}/origin`;
-    await init(origin);
-    await commit(origin, 'base a%d', 5);
-    const base = await git.head(origin);
-    await commit(origin, 'base b%d', 5);
-    await git.git(origin, 'branch', 'br1');
-    await commit(origin, 'main %d', 10);
-    await git.git(origin, 'checkout', 'br1');
-    await commit(origin, 'br1 before merge %d', 5);
-    await git.git(origin, 'merge', '--no-ff', 'main');
-    await commit(origin, 'br1 after merge %d', 10);
-    await git.git(origin, 'checkout', 'main');
-    await commit(origin, 'main after merge %d', 10);
-    await git.git(origin, 'checkout', '-b', 'br2', base);
-    await commit(origin, 'br2');
-    await git.git(origin, 'checkout', 'br1');
-    await git.git(origin, 'merge', '--no-ff', 'br2');
+      const deps = { git, logger, now: Date.now, cloneUrl: () => origin };
+      const result = await rebaseOntoBase(
+        deps,
+        pullRequest({
+          head: { ref: 'feature', sha: featureSha, repoFullName: 'owner/repo' },
+          base: { ref: 'main', sha: 'base-sha', repoFullName: 'owner/repo' },
+        }),
+      );
 
-    const ws = `${path}/ws`;
-    await git.clone(`${path}/origin`, ws, 'br1');
-    await git.fetch(ws, 'main');
-    expect(await git.fetchUntilMergeBase(ws, 'main', 10000)).toBe(base);
-  });
-}, 15000);
-
-test('mergeCommits returns the correct commits', async () => {
-  await tmpdir(async (path) => {
-    await init(path);
-    await commit(path, 'main %d', 2);
-    const head1 = await git.head(path);
-    await git.git(path, 'checkout', '-b', 'branch', 'HEAD^');
-    const head2 = await git.head(path);
-    await git.git(path, 'merge', '--no-ff', 'main');
-
-    const commits = await git.mergeCommits(path, 'HEAD^');
-    expect(commits).toHaveLength(1);
-    expect(commits[0][0]).toBe(head2);
-    expect(commits[0][1]).toBe(head1);
-  });
+      const newSha = expectOk(result);
+      expect(newSha).not.toBeNull();
+      expect(newSha).not.toEqual(featureSha);
+      expect(await run(origin, ['rev-parse', 'refs/heads/feature'])).toEqual(newSha);
+    });
+  }, 20_000);
 });

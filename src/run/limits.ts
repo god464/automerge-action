@@ -1,0 +1,1 @@
+export const MAX_PULL_REQUESTS_PER_RUN = 10;

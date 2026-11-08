@@ -1,0 +1,74 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Find the release pull request
+        id: release-pr
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          branch=$(gh pr list \
+            --label 'autorelease: pending' \
+            --json headRefName \
+            --jq '.[0].headRefName')
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        if: steps.release-pr.outputs.branch != ''
+        with:
+          ref: ${{ steps.release-pr.outputs.branch }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+        if: steps.release-pr.outputs.branch != ''
+
+      - uses: actions/setup-node@v7
+        if: steps.release-pr.outputs.branch != ''
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Build dist into the release pull request
+        if: steps.release-pr.outputs.branch != ''
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm format
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm build
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Release pull request is already prepared"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: prepare release"
+          git push

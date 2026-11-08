@@ -1,7 +1,48 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["vitest", "import", "node", "promise", "jsdoc"],
+  "plugins": ["vitest", "import", "node", "promise", "unicorn", "typescript"],
   "categories": { "correctness": "error" },
   "options": { "typeAware": true, "typeCheck": true },
-  "ignorePatterns": ["dist", "build"]
+  "rules": {
+    "no-var": "error",
+    "prefer-const": "error",
+    "no-param-reassign": ["error", { "props": true }],
+    "no-plusplus": "error",
+    "no-throw-literal": "error",
+    "no-else-return": "error",
+    "no-shadow": "error",
+    "no-unused-vars": "error",
+    "no-use-before-define": ["error", { "functions": false }],
+    "import/no-cycle": "error",
+    "import/no-mutable-exports": "error",
+    "unicorn/no-process-exit": "error",
+    "unicorn/no-this-assignment": "error",
+    "unicorn/no-static-only-class": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "error",
+    "max-depth": ["error", 2],
+    "max-params": ["error", 3],
+    "max-lines-per-function": [
+      "error",
+      { "max": 40, "skipBlankLines": true, "skipComments": true }
+    ],
+    "complexity": ["error", 10]
+  },
+  "overrides": [
+    {
+      "files": ["src/domain/**", "src/events/**"],
+      "rules": { "typescript/prefer-readonly-parameter-types": "error" }
+    },
+    {
+      "files": ["src/github/**", "src/git/**", "src/main.ts", "src/run/**", "test/**"],
+      "rules": {
+        "complexity": "off",
+        "max-lines-per-function": "off",
+        "max-params": "off",
+        "typescript/prefer-readonly-parameter-types": "off"
+      }
+    },
+    { "files": ["src/result.ts"], "rules": { "max-params": "off" } }
+  ],
+  "ignorePatterns": ["dist", "node_modules"]
 }

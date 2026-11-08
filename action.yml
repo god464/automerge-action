@@ -1,5 +1,29 @@
 name: 'Merge pull requests (automerge-action)'
-description: 'Automatically merge pull requests that are ready'
+description: 'Automatically update and merge pull requests that are ready'
+inputs:
+  github-token:
+    description: 'GitHub token with contents:write and pull-requests:write'
+    required: true
+  merge-labels:
+    description: 'Comma-separated labels; prefix ! to block. Empty means all PRs.'
+    default: 'automerge'
+  merge-method:
+    description: 'Merge method: merge, squash, or rebase'
+    default: 'merge'
+  merge-commit-message:
+    description: 'Commit message: automatic or pull-request-title'
+    default: 'automatic'
+  update-labels:
+    description: 'Comma-separated labels; prefix ! to block. Empty means all PRs.'
+    default: 'automerge'
+  update-method:
+    description: 'Update method: merge or rebase'
+    default: 'merge'
+outputs:
+  merge-result:
+    description: 'One of skipped, not_ready, merge_failed, merged'
+  pull-request-number:
+    description: 'Pull request number for a merge result, or 0 if none'
 runs:
   using: 'node24'
   main: 'dist/index.js'

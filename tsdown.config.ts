@@ -1,8 +1,8 @@
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
+  entry: { index: 'src/main.ts' },
   minify: true,
-  entry: { index: 'bin/automerge.ts' },
   fixedExtension: false,
   deps: { alwaysBundle: [/./] },
 });
