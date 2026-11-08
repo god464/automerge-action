@@ -14,8 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsdown",
-    "verify": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
-    "prepack": "pnpm run verify"
+    "verify": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "dependencies": {
     "@actions/core": "^3.0.1",
