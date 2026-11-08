@@ -32,7 +32,7 @@ export async function update(context: Context, pullRequest: PullRequest): Promis
     throw new Error(`invalid update method: ${updateMethod}`);
   }
 
-  if (newSha != null && newSha != head.sha) {
+  if (newSha != null && newSha !== head.sha) {
     head.sha = newSha;
     return true;
   } else {

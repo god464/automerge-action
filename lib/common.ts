@@ -148,7 +148,7 @@ export function createConfig(env: ConfigEnv = {}): Config {
       return { repoOwner, repoName, pullRequestNumber: number };
     }
 
-    if (typeof pullRequest === 'number' && pullRequest > 0) {
+    if (pullRequest > 0) {
       return { pullRequestNumber: pullRequest };
     }
 
