@@ -1,17 +1,17 @@
-import { err, ok, assertNever, type Result } from '../result.js';
-import type { RepoRef } from '../domain/pull-request.js';
+import {assertNever, err, ok, type Result} from '../result';
+import type {RepoRef} from '../domain/pull-request';
 import {
-  EVENT_NAMES,
   type CheckSuiteEvent,
+  EVENT_NAMES,
   type EventName,
   type EventParseError,
   type ParsedEvent,
-  type PullRequestRef,
   type PullRequestEvent,
+  type PullRequestRef,
   type PullRequestReviewEvent,
   type StatusEvent,
   type WorkflowRunEvent,
-} from './event.js';
+} from './event';
 
 function recordOf(value: unknown): Readonly<Record<string, unknown>> | null {
   return typeof value === 'object' && value !== null

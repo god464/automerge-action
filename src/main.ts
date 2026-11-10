@@ -1,18 +1,18 @@
 import process from 'node:process';
-import { readFile } from 'node:fs/promises';
-import { setTimeout as sleep } from 'node:timers/promises';
+import {readFile} from 'node:fs/promises';
+import {setTimeout as sleep} from 'node:timers/promises';
 import * as core from '@actions/core';
-import { readActionInputs } from './actions/inputs.js';
-import { actionsLogger } from './actions/logger.js';
-import { actionsOutputs } from './actions/outputs.js';
-import { parseConfig, type ConfigError } from './config/config.js';
-import { parseEvent } from './events/parse.js';
-import { createGitRunner } from './git/command.js';
-import { createGitHubClient } from './github/octokit-client.js';
-import { assertNever, err, ok, type Result } from './result.js';
-import { writeReport } from './run/report.js';
-import { runFromEvent } from './run/run.js';
-import { skippedReport } from './run/result.js';
+import {readActionInputs} from './actions/inputs';
+import {actionsLogger} from './actions/logger';
+import {actionsOutputs} from './actions/outputs';
+import {type ConfigError, parseConfig} from './config/config';
+import {parseEvent} from './events/parse';
+import {createGitRunner} from './git/command';
+import {createGitHubClient} from './github/octokit-client';
+import {assertNever, err, ok, type Result} from './result';
+import {writeReport} from './run/report';
+import {runFromEvent} from './run/run';
+import {skippedReport} from './run/result';
 
 function formatConfigError(error: ConfigError): string {
   switch (error.kind) {

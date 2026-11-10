@@ -1,6 +1,6 @@
-import type { MergeMethod } from '../domain/methods.js';
-import type { PullRequestSnapshot, RepoRef } from '../domain/pull-request.js';
-import type { Result } from '../result.js';
+import type {MergeMethod} from '../domain/methods';
+import type {PullRequestSnapshot, RepoRef} from '../domain/pull-request';
+import type {Result} from '../result';
 
 export type GitHubError =
   | { readonly kind: 'not_found'; readonly message: string }

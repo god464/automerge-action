@@ -1,13 +1,13 @@
-import { assertNever } from '../result.js';
-import type { RepoRef } from '../domain/pull-request.js';
+import {assertNever} from '../result';
+import type {RepoRef} from '../domain/pull-request';
 import type {
-  CheckSuiteEvent,
-  ParsedEvent,
-  PullRequestEvent,
-  PullRequestReviewEvent,
-  StatusEvent,
-  WorkflowRunEvent,
-} from './event.js';
+    CheckSuiteEvent,
+    ParsedEvent,
+    PullRequestEvent,
+    PullRequestReviewEvent,
+    StatusEvent,
+    WorkflowRunEvent,
+} from './event';
 
 export const RELEVANT_PULL_REQUEST_ACTIONS = [
   'labeled',
@@ -19,8 +19,6 @@ export const RELEVANT_PULL_REQUEST_ACTIONS = [
   'reopened',
   'unlocked',
 ] as const;
-
-export type TargetMode = 'update_and_merge' | 'update_only';
 
 export type EventTargets =
   | {

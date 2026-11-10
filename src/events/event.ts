@@ -1,4 +1,4 @@
-import type { RepoRef } from '../domain/pull-request.js';
+import type {RepoRef} from '../domain/pull-request';
 
 export const EVENT_NAMES = [
   'pull_request',

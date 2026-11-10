@@ -1,18 +1,18 @@
-import type { Logger } from '../actions/logger.js';
-import type { Config } from '../config/config.js';
-import { decideMerge } from '../domain/merge-decision.js';
-import { isBehind, shouldProbeBehind } from '../domain/merge-state.js';
-import type { MergeMethod } from '../domain/methods.js';
-import type { PullRequestSnapshot, RepoRef } from '../domain/pull-request.js';
-import { decideUpdate, updateEligibility } from '../domain/update-decision.js';
-import type { GitRunner } from '../git/command.js';
-import { rebaseOntoBase } from '../git/rebase.js';
-import type { GitHubClient } from '../github/client.js';
-import { ok } from '../result.js';
-import { MAX_PULL_REQUESTS_PER_RUN } from './limits.js';
-import { mapSeries } from './map-series.js';
-import { resolvePullRequestSnapshot } from './resolve-state.js';
-import type { RunResult } from './result.js';
+import type {Logger} from '../actions/logger';
+import type {Config} from '../config/config';
+import {decideMerge} from '../domain/merge-decision';
+import {isBehind, shouldProbeBehind} from '../domain/merge-state';
+import type {MergeMethod} from '../domain/methods';
+import type {PullRequestSnapshot, RepoRef} from '../domain/pull-request';
+import {decideUpdate, updateEligibility} from '../domain/update-decision';
+import type {GitRunner} from '../git/command';
+import {rebaseOntoBase} from '../git/rebase';
+import type {GitHubClient} from '../github/client';
+import {ok} from '../result';
+import {MAX_PULL_REQUESTS_PER_RUN} from './limits';
+import {mapSeries} from './map-series';
+import {resolvePullRequestSnapshot} from './resolve-state';
+import type {RunResult} from './result';
 
 export interface ProcessDeps {
   readonly config: Config;

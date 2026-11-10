@@ -1,6 +1,6 @@
-import type { Logger } from '../src/actions/logger.js';
-import type { PullRequestSnapshot, RepoRef } from '../src/domain/pull-request.js';
-import type { GitRunner } from '../src/git/command.js';
+import type {Logger} from '../src/actions/logger';
+import type {PullRequestSnapshot, RepoRef} from '../src/domain/pull-request';
+import type {GitRunner} from '../src/git/command';
 import type {
   CompareResult,
   GitHubClient,
@@ -10,9 +10,9 @@ import type {
   MergePullRequestParams,
   PullRequestFilter,
   PullRequestSummary,
-} from '../src/github/client.js';
-import { ok, type Result } from '../src/result.js';
-import { pullRequest } from './factories.js';
+} from '../src/github/client';
+import {ok, type Result} from '../src/result';
+import {pullRequest} from './factories';
 
 export interface FakeClientCalls {
   readonly getPullRequest: { readonly repo: RepoRef; readonly number: number }[];

@@ -1,8 +1,8 @@
-import type { Logger } from '../actions/logger.js';
-import type { PullRequestSnapshot } from '../domain/pull-request.js';
-import { err, ok, type Result } from '../result.js';
-import type { GitError, GitRunner } from './command.js';
-import { withTempDir, type TempDirError } from './tmpdir.js';
+import type {Logger} from '../actions/logger';
+import type {PullRequestSnapshot} from '../domain/pull-request';
+import {err, ok, type Result} from '../result';
+import type {GitError, GitRunner} from './command';
+import {type TempDirError, withTempDir} from './tmpdir';
 
 export const FETCH_DEPTH = '10';
 export const FETCH_TIMEOUT_MS = 60_000;

@@ -1,13 +1,13 @@
-import { err, ok, type Result } from '../result.js';
-import { parseLabelFilter, type LabelFilter } from '../domain/labels.js';
+import {err, ok, type Result} from '../result.js';
+import {type LabelFilter, parseLabelFilter} from '../domain/labels.js';
 import {
   MERGE_COMMIT_MESSAGES,
   MERGE_METHODS,
-  UPDATE_METHODS,
   type MergeCommitMessage,
   type MergeMethod,
+  UPDATE_METHODS,
   type UpdateMethod,
-} from '../domain/methods.js';
+} from '../domain/methods';
 
 export const INPUT_NAMES = [
   'github-token',

@@ -1,6 +1,6 @@
-import type { Config } from '../src/config/config.js';
-import type { PullRequestSnapshot } from '../src/domain/pull-request.js';
-import type { Result } from '../src/result.js';
+import type {Config} from '../src/config/config';
+import type {PullRequestSnapshot} from '../src/domain/pull-request';
+import type {Result} from '../src/result';
 
 export function expectOk<T, E>(result: Result<T, E>): T {
   if (!result.ok) {

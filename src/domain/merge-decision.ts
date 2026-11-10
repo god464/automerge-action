@@ -1,7 +1,7 @@
-import { labelSkipReason, type LabelFilter, type LabelSkipReason } from './labels.js';
-import { classifyMergeableState, type NotReadyReason } from './merge-state.js';
-import type { MergeCommitMessage, MergeMethod } from './methods.js';
-import type { PullRequestSnapshot } from './pull-request.js';
+import {type LabelFilter, labelSkipReason, type LabelSkipReason} from './labels';
+import {classifyMergeableState, type NotReadyReason} from './merge-state';
+import type {MergeCommitMessage, MergeMethod} from './methods';
+import type {PullRequestSnapshot} from './pull-request';
 
 export type MergeSkipReason = 'not_open' | 'already_merged' | 'head_repo_missing' | LabelSkipReason;
 

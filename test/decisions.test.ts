@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { decideMerge, commitTitleFor } from '../src/domain/merge-decision.js';
-import { classifyMergeableState, isBehind, shouldProbeBehind } from '../src/domain/merge-state.js';
-import type { LabelFilter } from '../src/domain/labels.js';
-import type { MergeableState } from '../src/domain/pull-request.js';
-import { decideUpdate, updateEligibility } from '../src/domain/update-decision.js';
-import { pullRequest } from './factories.js';
+import {describe, expect, it} from 'vitest';
+import {commitTitleFor, decideMerge} from '../src/domain/merge-decision';
+import {classifyMergeableState, isBehind, shouldProbeBehind} from '../src/domain/merge-state';
+import type {LabelFilter} from '../src/domain/labels';
+import type {MergeableState} from '../src/domain/pull-request';
+import {decideUpdate, updateEligibility} from '../src/domain/update-decision';
+import {pullRequest} from './factories.js';
 
 const filter: LabelFilter = { required: ['automerge'], blocking: ['wip'] };
 

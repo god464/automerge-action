@@ -1,6 +1,6 @@
-import { labelSkipReason, type LabelFilter, type LabelSkipReason } from './labels.js';
-import type { UpdateMethod } from './methods.js';
-import type { PullRequestSnapshot } from './pull-request.js';
+import {type LabelFilter, labelSkipReason, type LabelSkipReason} from './labels';
+import type {UpdateMethod} from './methods';
+import type {PullRequestSnapshot} from './pull-request';
 
 export type UpdateSkipReason =
   | 'not_open'
