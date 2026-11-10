@@ -1,8 +1,8 @@
-import {mkdtemp} from 'node:fs/promises';
-import {tmpdir as osTmpdir} from 'node:os';
-import {join} from 'node:path';
-import {rmRF} from '@actions/io';
-import {err, ok, type Result} from '../result';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir as osTmpdir } from 'node:os';
+import { join } from 'node:path';
+import { rmRF } from '@actions/io';
+import { err, ok, type Result } from '../result';
 
 export type TempDirError = { readonly kind: 'temp_dir_failed'; readonly message: string };
 

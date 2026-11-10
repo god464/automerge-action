@@ -1,5 +1,5 @@
-import {assertNever, err, ok, type Result} from '../result';
-import type {RepoRef} from '../domain/pull-request';
+import { assertNever, err, ok, type Result } from '../result';
+import type { RepoRef } from '../domain/pull-request';
 import {
   type CheckSuiteEvent,
   EVENT_NAMES,

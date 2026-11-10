@@ -1,11 +1,11 @@
-import {assertNever} from '../result';
-import type {EventTargets} from '../events/targets';
-import {resolveTargets} from '../events/targets';
-import type {ParsedEvent} from '../events/event';
-import {MAX_PULL_REQUESTS_PER_RUN} from './limits';
-import {mapSeries} from './map-series';
-import {type ProcessDeps, processPullRequest} from './process-pull-request';
-import {type RunReport, type RunResult, skippedReport} from './result';
+import { assertNever } from '../result';
+import type { EventTargets } from '../events/targets';
+import { resolveTargets } from '../events/targets';
+import type { ParsedEvent } from '../events/event';
+import { MAX_PULL_REQUESTS_PER_RUN } from './limits';
+import { mapSeries } from './map-series';
+import { type ProcessDeps, processPullRequest } from './process-pull-request';
+import { type RunReport, type RunResult, skippedReport } from './result';
 
 export type RunDeps = ProcessDeps;
 

@@ -1,7 +1,7 @@
-import {describe, expect, it} from 'vitest';
-import {parseConfig} from '../src/config/config';
-import {matchesLabelFilter, parseLabelFilter} from '../src/domain/labels';
-import {expectOk} from './factories';
+import { describe, expect, it } from 'vitest';
+import { parseConfig } from '../src/config/config';
+import { matchesLabelFilter, parseLabelFilter } from '../src/domain/labels';
+import { expectOk } from './factories';
 
 describe('parseConfig', () => {
   it('uses the documented defaults', () => {

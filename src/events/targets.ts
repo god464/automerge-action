@@ -1,12 +1,12 @@
-import {assertNever} from '../result';
-import type {RepoRef} from '../domain/pull-request';
+import { assertNever } from '../result';
+import type { RepoRef } from '../domain/pull-request';
 import type {
-    CheckSuiteEvent,
-    ParsedEvent,
-    PullRequestEvent,
-    PullRequestReviewEvent,
-    StatusEvent,
-    WorkflowRunEvent,
+  CheckSuiteEvent,
+  ParsedEvent,
+  PullRequestEvent,
+  PullRequestReviewEvent,
+  StatusEvent,
+  WorkflowRunEvent,
 } from './event';
 
 export const RELEVANT_PULL_REQUEST_ACTIONS = [

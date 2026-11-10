@@ -1,10 +1,10 @@
-import {describe, expect, it} from 'vitest';
-import type {ProcessDeps} from '../src/run/process-pull-request';
-import {processPullRequest} from '../src/run/process-pull-request';
-import {runFromEvent} from '../src/run/run';
-import type {ParsedEvent} from '../src/events/event';
-import type {PullRequestSnapshot} from '../src/domain/pull-request';
-import {err, ok} from '../src/result';
+import { describe, expect, it } from 'vitest';
+import type { ProcessDeps } from '../src/run/process-pull-request';
+import { processPullRequest } from '../src/run/process-pull-request';
+import { runFromEvent } from '../src/run/run';
+import type { ParsedEvent } from '../src/events/event';
+import type { PullRequestSnapshot } from '../src/domain/pull-request';
+import { err, ok } from '../src/result';
 import {
   createFakeClient,
   createFakeLogger,
@@ -12,7 +12,7 @@ import {
   createUnusedGitRunner,
   type FakeClientOptions,
 } from './fakes.js';
-import {config, pullRequest} from './factories.js';
+import { config, pullRequest } from './factories.js';
 
 const repo = { owner: 'owner', repo: 'repo' };
 

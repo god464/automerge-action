@@ -1,4 +1,4 @@
-import type {MergeableState, PullRequestSnapshot} from './pull-request';
+import type { MergeableState, PullRequestSnapshot } from './pull-request';
 
 export type NotReadyReason = 'mergeable_false' | 'draft' | 'blocked' | 'behind' | 'dirty' | 'other';
 

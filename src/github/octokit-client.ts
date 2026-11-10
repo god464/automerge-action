@@ -1,7 +1,18 @@
-import {Octokit} from '@octokit/core';
-import type {BranchRef, MergeableState, PullRequestSnapshot, RepoRef} from '../domain/pull-request';
-import {err, ok, type Result} from '../result';
-import type {CompareResult, GitHubClient, GitHubError, MergeBaseResult, PullRequestSummary,} from './client.js';
+import { Octokit } from '@octokit/core';
+import type {
+  BranchRef,
+  MergeableState,
+  PullRequestSnapshot,
+  RepoRef,
+} from '../domain/pull-request';
+import { err, ok, type Result } from '../result';
+import type {
+  CompareResult,
+  GitHubClient,
+  GitHubError,
+  MergeBaseResult,
+  PullRequestSummary,
+} from './client.js';
 
 export interface GitHubClientOptions {
   readonly token: string;

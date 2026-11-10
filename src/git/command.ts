@@ -1,6 +1,6 @@
-import {getExecOutput} from '@actions/exec';
-import type {Logger} from '../actions/logger';
-import {err, ok, type Result} from '../result';
+import { getExecOutput } from '@actions/exec';
+import type { Logger } from '../actions/logger';
+import { err, ok, type Result } from '../result';
 
 export interface GitOutput {
   readonly stdout: string;

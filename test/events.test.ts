@@ -1,7 +1,7 @@
-import {describe, expect, it} from 'vitest';
-import {parseEvent} from '../src/events/parse';
-import {resolveTargets} from '../src/events/targets';
-import {expectOk} from './factories';
+import { describe, expect, it } from 'vitest';
+import { parseEvent } from '../src/events/parse';
+import { resolveTargets } from '../src/events/targets';
+import { expectOk } from './factories';
 
 const repo = { owner: 'owner', repo: 'repo' };
 const payloadRepository = { name: 'repo', owner: { login: 'owner' } };

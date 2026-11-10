@@ -1,5 +1,5 @@
-import {err, ok, type Result} from '../result.js';
-import {type LabelFilter, parseLabelFilter} from '../domain/labels.js';
+import { err, ok, type Result } from '../result.js';
+import { type LabelFilter, parseLabelFilter } from '../domain/labels.js';
 import {
   MERGE_COMMIT_MESSAGES,
   MERGE_METHODS,

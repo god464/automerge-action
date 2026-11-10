@@ -1,12 +1,12 @@
-import {mkdir} from 'node:fs/promises';
-import {join} from 'node:path';
-import {describe, expect, it} from 'vitest';
-import {createGitRunner} from '../src/git/command';
-import {fetchUntilMergeBase, rebaseOntoBase} from '../src/git/rebase';
-import {withTempDir} from '../src/git/tmpdir';
-import {ok} from '../src/result';
-import {createFakeLogger} from './fakes';
-import {expectOk, pullRequest} from './factories';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { createGitRunner } from '../src/git/command';
+import { fetchUntilMergeBase, rebaseOntoBase } from '../src/git/rebase';
+import { withTempDir } from '../src/git/tmpdir';
+import { ok } from '../src/result';
+import { createFakeLogger } from './fakes';
+import { expectOk, pullRequest } from './factories';
 
 const logger = createFakeLogger();
 const git = createGitRunner(logger);

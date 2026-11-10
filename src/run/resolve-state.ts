@@ -1,8 +1,8 @@
-import type {Logger} from '../actions/logger';
-import {classifyMergeableState} from '../domain/merge-state';
-import type {PullRequestSnapshot, RepoRef} from '../domain/pull-request';
-import type {GitHubClient, GitHubError} from '../github/client';
-import {ok, type Result} from '../result';
+import type { Logger } from '../actions/logger';
+import { classifyMergeableState } from '../domain/merge-state';
+import type { PullRequestSnapshot, RepoRef } from '../domain/pull-request';
+import type { GitHubClient, GitHubError } from '../github/client';
+import { ok, type Result } from '../result';
 
 export const UNKNOWN_STATE_RETRIES = 3;
 export const UNKNOWN_STATE_RETRY_DELAY_MS = 2000;
