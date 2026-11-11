@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.1](https://github.com/god464/automerge-action/compare/v1.0.0...v1.0.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* fix config ([524c7f9](https://github.com/god464/automerge-action/commit/524c7f9e9c726058094333746649aa6888d8c2c9))
+* fix format ([9062e78](https://github.com/god464/automerge-action/commit/9062e78c5a839b72e1d0c1a680e525faafc92b98))
+* fix imports ([11c4741](https://github.com/god464/automerge-action/commit/11c4741d16af320daf737607bb71111d1c3f8e98))
+* remove unused ([d0a62a2](https://github.com/god464/automerge-action/commit/d0a62a257236534d26305d4c36cbb379d80f372a))
+
 ## [1.0.0](https://github.com/god464/automerge-action/releases/tag/v1.0.0) (2026-11-08)
 
 ### BREAKING CHANGES
