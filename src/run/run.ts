@@ -1,7 +1,7 @@
-import { assertNever } from '../result';
+import type { ParsedEvent } from '../events/event';
 import type { EventTargets } from '../events/targets';
 import { resolveTargets } from '../events/targets';
-import type { ParsedEvent } from '../events/event';
+import { assertNever } from '../result';
 import { MAX_PULL_REQUESTS_PER_RUN } from './limits';
 import { mapSeries } from './map-series';
 import { type ProcessDeps, processPullRequest } from './process-pull-request';

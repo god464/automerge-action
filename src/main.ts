@@ -1,7 +1,9 @@
-import process from 'node:process';
 import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
+
 import * as core from '@actions/core';
+
 import { readActionInputs } from './actions/inputs';
 import { actionsLogger } from './actions/logger';
 import { actionsOutputs } from './actions/outputs';
@@ -11,8 +13,8 @@ import { createGitRunner } from './git/command';
 import { createGitHubClient } from './github/octokit-client';
 import { assertNever, err, ok, type Result } from './result';
 import { writeReport } from './run/report';
-import { runFromEvent } from './run/run';
 import { skippedReport } from './run/result';
+import { runFromEvent } from './run/run';
 
 function formatConfigError(error: ConfigError): string {
   switch (error.kind) {

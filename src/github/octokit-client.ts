@@ -1,4 +1,5 @@
 import { Octokit } from '@octokit/core';
+
 import type {
   BranchRef,
   MergeableState,
@@ -12,7 +13,7 @@ import type {
   GitHubError,
   MergeBaseResult,
   PullRequestSummary,
-} from './client.js';
+} from './client';
 
 export interface GitHubClientOptions {
   readonly token: string;

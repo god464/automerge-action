@@ -1,5 +1,4 @@
-import { err, ok, type Result } from '../result.js';
-import { type LabelFilter, parseLabelFilter } from '../domain/labels.js';
+import { type LabelFilter, parseLabelFilter } from '../domain/labels';
 import {
   MERGE_COMMIT_MESSAGES,
   MERGE_METHODS,
@@ -8,6 +7,7 @@ import {
   UPDATE_METHODS,
   type UpdateMethod,
 } from '../domain/methods';
+import { err, ok, type Result } from '../result';
 
 export const INPUT_NAMES = [
   'github-token',
