@@ -45,7 +45,7 @@ jobs:
           ref: ${{ steps.release-pr.outputs.branch }}
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.release-pr.outputs.branch != ''
 
       - uses: actions/setup-node@v7
