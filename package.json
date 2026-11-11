@@ -23,7 +23,7 @@
     "@octokit/core": "^7.0.8"
   },
   "devDependencies": {
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.0",
     "oxfmt": "^0.77.0",
     "oxlint": "^1.92.0",
