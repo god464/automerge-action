@@ -39,7 +39,7 @@ jobs:
             --jq '.[0].headRefName')
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: steps.release-pr.outputs.branch != ''
         with:
           ref: ${{ steps.release-pr.outputs.branch }}
