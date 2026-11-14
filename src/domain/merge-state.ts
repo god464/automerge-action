@@ -18,23 +18,17 @@ const NOT_READY_REASONS: Readonly<Record<NotReadyState, NotReadyReason>> = {
 };
 
 function classifyKnownState(state: MergeableState | null): MergeableClassification {
-  if (state == null || state === 'unknown') {
-    return { kind: 'unknown' };
-  }
-  if (state === 'clean' || state === 'has_hooks' || state === 'unstable') {
-    return { kind: 'ready' };
-  }
+  if (state == null || state === 'unknown') return { kind: 'unknown' };
+
+  if (state === 'clean' || state === 'has_hooks' || state === 'unstable') return { kind: 'ready' };
 
   return { kind: 'not_ready', reason: NOT_READY_REASONS[state] };
 }
 
 export function classifyMergeableState(snapshot: PullRequestSnapshot): MergeableClassification {
-  if (snapshot.mergeable === false) {
-    return { kind: 'not_ready', reason: 'mergeable_false' };
-  }
-  if (snapshot.draft) {
-    return { kind: 'not_ready', reason: 'draft' };
-  }
+  if (snapshot.mergeable === false) return { kind: 'not_ready', reason: 'mergeable_false' };
+
+  if (snapshot.draft) return { kind: 'not_ready', reason: 'draft' };
 
   return classifyKnownState(snapshot.mergeableState);
 }

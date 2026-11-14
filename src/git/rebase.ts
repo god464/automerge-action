@@ -1,6 +1,7 @@
-import type { Logger } from '../actions/logger';
-import type { PullRequestSnapshot } from '../domain/pull-request';
-import { err, ok, type Result } from '../result';
+import type { Logger } from '@/actions/logger';
+import type { PullRequestSnapshot } from '@/domain/pull-request';
+import { err, ok, type Result } from '@/result';
+
 import type { GitError, GitRunner } from './command';
 import { type TempDirError, withTempDir } from './tmpdir';
 
@@ -28,9 +29,7 @@ async function mergeBasePair(
   right: string,
 ): Promise<Result<string | null, GitError>> {
   const result = await deps.git.run(dir, ['merge-base', left, right], { allowedExitCodes: [0, 1] });
-  if (!result.ok) {
-    return result;
-  }
+  if (!result.ok) return result;
 
   return ok(result.value.exitCode === 1 ? null : result.value.stdout || null);
 }
@@ -41,24 +40,21 @@ async function mergeBase(
   refs: readonly string[],
 ): Promise<Result<string | null, GitError>> {
   const first = refs[0];
-  if (first == null) {
+  if (first == null)
     return err({
       kind: 'unexpected_exit',
       command: 'git merge-base',
       exitCode: 1,
       stderr: 'empty refs',
     });
-  }
-  if (refs.length === 1) {
-    return ok(first);
-  }
+
+  if (refs.length === 1) return ok(first);
 
   return refs.slice(1).reduce<Promise<Result<string | null, GitError>>>(
     async (accumulatorPromise, ref) => {
       const accumulator = await accumulatorPromise;
-      if (!accumulator.ok || accumulator.value == null) {
-        return accumulator;
-      }
+      if (!accumulator.ok || accumulator.value == null) return accumulator;
+
       return mergeBasePair(deps, dir, accumulator.value, ref);
     },
     Promise.resolve(ok(first)),
@@ -71,9 +67,7 @@ async function mergeCommits(
   ref: string,
 ): Promise<Result<readonly (readonly string[])[], GitError>> {
   const result = await deps.git.run(dir, ['rev-list', '--parents', `${ref}..HEAD`]);
-  if (!result.ok) {
-    return result;
-  }
+  if (!result.ok) return result;
 
   return ok(
     result.value.stdout
@@ -89,30 +83,21 @@ async function findEarliestBase(
   ref: string,
 ): Promise<Result<string | null, GitError>> {
   const base = await mergeBase(deps, dir, ['HEAD', ref]);
-  if (!base.ok) {
-    return base;
-  }
-  if (base.value == null) {
-    return ok(null);
-  }
+  if (!base.ok) return base;
+
+  if (base.value == null) return ok(null);
 
   const commits = await mergeCommits(deps, dir, ref);
-  if (!commits.ok) {
-    return commits;
-  }
+  if (!commits.ok) return commits;
 
   const parentResults = await Promise.all(
     commits.value.flat().map((parent) => mergeBase(deps, dir, [parent, ref])),
   );
   const errors = parentResults.flatMap((result) => (result.ok ? [] : [result.error]));
   const firstError = errors[0];
-  if (firstError != null) {
-    return err(firstError);
-  }
+  if (firstError != null) return err(firstError);
 
-  if (parentResults.some((result) => result.ok && result.value == null)) {
-    return ok(null);
-  }
+  if (parentResults.some((result) => result.ok && result.value == null)) return ok(null);
 
   const bases = parentResults.flatMap((result) =>
     result.ok && result.value != null ? [result.value] : [],
@@ -139,12 +124,9 @@ export async function fetchUntilMergeBase(
     }
 
     const common = await findEarliestBase(deps, dir, ref);
-    if (!common.ok) {
-      return common;
-    }
-    if (common.value != null) {
-      return ok(common.value);
-    }
+    if (!common.ok) return common;
+
+    if (common.value != null) return ok(common.value);
 
     const deepen = await deps.git.run(dir, [
       'fetch',
@@ -154,9 +136,7 @@ export async function fetchUntilMergeBase(
       'origin',
       `${branch}:${ref}`,
     ]);
-    if (!deepen.ok) {
-      return deepen;
-    }
+    if (!deepen.ok) return deepen;
 
     return attempt();
   }
@@ -169,9 +149,7 @@ export async function rebaseOntoBase(
   pullRequest: PullRequestSnapshot,
 ): Promise<Result<string | null, RebaseError>> {
   const repoFullName = pullRequest.head.repoFullName;
-  if (repoFullName == null) {
-    return err({ kind: 'head_repo_missing' });
-  }
+  if (repoFullName == null) return err({ kind: 'head_repo_missing' });
 
   return withTempDir(async (dir) => {
     const clone = await deps.git.run(
@@ -189,9 +167,7 @@ export async function rebaseOntoBase(
       ],
       { redactedCommand: 'git clone' },
     );
-    if (!clone.ok) {
-      return clone;
-    }
+    if (!clone.ok) return clone;
 
     const fetch = await deps.git.run(dir, [
       'fetch',
@@ -201,35 +177,27 @@ export async function rebaseOntoBase(
       'origin',
       `${pullRequest.base.ref}:refs/remotes/origin/${pullRequest.base.ref}`,
     ]);
-    if (!fetch.ok) {
-      return fetch;
-    }
+    if (!fetch.ok) return fetch;
 
     const base = await fetchUntilMergeBase(deps, dir, pullRequest.base.ref, FETCH_TIMEOUT_MS);
-    if (!base.ok) {
-      return base;
-    }
+    if (!base.ok) return base;
 
     const head = await deps.git.run(dir, ['show-ref', '--head', '-s', '/HEAD']);
-    if (!head.ok) {
-      return head;
-    }
-    if (head.value.stdout !== pullRequest.head.sha) {
+    if (!head.ok) return head;
+
+    if (head.value.stdout !== pullRequest.head.sha)
       return err({
         kind: 'head_changed',
         expected: pullRequest.head.sha,
         actual: head.value.stdout,
       });
-    }
 
     const onto = await deps.git.run(dir, [
       'show-ref',
       '-s',
       `refs/remotes/origin/${pullRequest.base.ref}`,
     ]);
-    if (!onto.ok) {
-      return onto;
-    }
+    if (!onto.ok) return onto;
 
     deps.logger.info(`Rebasing ${pullRequest.head.ref} onto ${pullRequest.base.ref}`);
     const rebase = await deps.git.run(dir, [
@@ -238,14 +206,11 @@ export async function rebaseOntoBase(
       '--autosquash',
       onto.value.stdout,
     ]);
-    if (!rebase.ok) {
-      return rebase;
-    }
+    if (!rebase.ok) return rebase;
 
     const newHead = await deps.git.run(dir, ['show-ref', '--head', '-s', '/HEAD']);
-    if (!newHead.ok) {
-      return newHead;
-    }
+    if (!newHead.ok) return newHead;
+
     if (newHead.value.stdout === head.value.stdout) {
       deps.logger.info(`Already up to date: ${pullRequest.head.ref}`);
       return ok(null);
@@ -258,9 +223,7 @@ export async function rebaseOntoBase(
       'origin',
       pullRequest.head.ref,
     ]);
-    if (!push.ok) {
-      return push;
-    }
+    if (!push.ok) return push;
 
     deps.logger.info(
       `Updated ${pullRequest.head.ref}: ${head.value.stdout} -> ${newHead.value.stdout}`,

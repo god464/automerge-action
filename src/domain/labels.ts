@@ -43,9 +43,7 @@ export function labelSkipReason(
   filter: LabelFilter,
 ): LabelSkipReason | null {
   const hasBlocking = filter.blocking.some((label) => labels.includes(label));
-  if (hasBlocking) {
-    return 'blocking_label';
-  }
+  if (hasBlocking) return 'blocking_label';
 
   const hasAllRequired = filter.required.every((label) => labels.includes(label));
   return hasAllRequired ? null : 'required_label_missing';

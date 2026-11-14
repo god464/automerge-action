@@ -1,5 +1,6 @@
-import type { RepoRef } from '../domain/pull-request';
-import { assertNever, err, ok, type Result } from '../result';
+import type { RepoRef } from '@/domain/pull-request';
+import { assertNever, err, ok, type Result } from '@/result';
+
 import {
   type CheckSuiteEvent,
   EVENT_NAMES,
@@ -31,9 +32,7 @@ function numberField(record: Readonly<Record<string, unknown>>, key: string): nu
 
 function repoFrom(value: unknown): RepoRef | null {
   const record = recordOf(value);
-  if (record == null) {
-    return null;
-  }
+  if (record == null) return null;
 
   const ownerRecord = recordOf(record['owner']);
   const owner = ownerRecord == null ? null : stringField(ownerRecord, 'login');
@@ -43,9 +42,7 @@ function repoFrom(value: unknown): RepoRef | null {
 }
 
 function readPullRequests(value: unknown): readonly PullRequestRef[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
+  if (!Array.isArray(value)) return [];
 
   return value.flatMap((entry) => {
     const record = recordOf(entry);
@@ -70,9 +67,8 @@ function parsePullRequestEvent(
   const repo = repoFrom(payload['repository']);
   const number = pullRequest == null ? null : numberField(pullRequest, 'number');
 
-  if (action == null || repo == null || number == null) {
+  if (action == null || repo == null || number == null)
     return malformed('pull_request', 'missing action, repository, or pull_request.number');
-  }
 
   return ok({ kind: 'pull_request', action, repo, pullRequestNumber: number });
 }
@@ -87,12 +83,11 @@ function parsePullRequestReviewEvent(
   const reviewState = review == null ? null : stringField(review, 'state');
   const number = pullRequest == null ? null : numberField(pullRequest, 'number');
 
-  if (action == null || repo == null || reviewState == null || number == null) {
+  if (action == null || repo == null || reviewState == null || number == null)
     return malformed(
       'pull_request_review',
       'missing action, review.state, repository, or pull_request.number',
     );
-  }
 
   return ok({ kind: 'pull_request_review', action, reviewState, repo, pullRequestNumber: number });
 }
@@ -104,9 +99,8 @@ function parseWorkflowRunEvent(
   const workflowRun = recordOf(payload['workflow_run']);
   const repo = repoFrom(payload['repository']);
 
-  if (action == null || workflowRun == null || repo == null) {
+  if (action == null || workflowRun == null || repo == null)
     return malformed('workflow_run', 'missing action, workflow_run, or repository');
-  }
 
   return ok({
     kind: 'workflow_run',
@@ -127,9 +121,8 @@ function parseCheckSuiteEvent(
   const checkSuite = recordOf(payload['check_suite']);
   const repo = repoFrom(payload['repository']);
 
-  if (action == null || checkSuite == null || repo == null) {
+  if (action == null || checkSuite == null || repo == null)
     return malformed('check_suite', 'missing action, check_suite, or repository');
-  }
 
   return ok({
     kind: 'check_suite',
@@ -148,9 +141,8 @@ function parseStatusEvent(
   const sha = stringField(payload, 'sha');
   const repo = repoFrom(payload['repository']);
 
-  if (state == null || sha == null || repo == null) {
+  if (state == null || sha == null || repo == null)
     return malformed('status', 'missing state, sha, or repository');
-  }
 
   return ok({ kind: 'status', state, sha, repo });
 }
@@ -159,14 +151,10 @@ export function parseEvent(
   eventName: string,
   payload: unknown,
 ): Result<ParsedEvent, EventParseError> {
-  if (!isSupportedEventName(eventName)) {
-    return ok({ kind: 'unsupported', eventName });
-  }
+  if (!isSupportedEventName(eventName)) return ok({ kind: 'unsupported', eventName });
 
   const record = recordOf(payload);
-  if (record == null) {
-    return malformed(eventName, 'event payload is not an object');
-  }
+  if (record == null) return malformed(eventName, 'event payload is not an object');
 
   switch (eventName) {
     case 'pull_request':

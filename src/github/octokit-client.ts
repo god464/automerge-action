@@ -5,8 +5,9 @@ import type {
   MergeableState,
   PullRequestSnapshot,
   RepoRef,
-} from '../domain/pull-request';
-import { err, ok, type Result } from '../result';
+} from '@/domain/pull-request';
+import { err, ok, type Result } from '@/result';
+
 import type {
   CompareResult,
   GitHubClient,

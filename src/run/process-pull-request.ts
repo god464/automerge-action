@@ -1,14 +1,15 @@
-import type { Logger } from '../actions/logger';
-import type { Config } from '../config/config';
-import { decideMerge } from '../domain/merge-decision';
-import { isBehind, shouldProbeBehind } from '../domain/merge-state';
-import type { MergeMethod } from '../domain/methods';
-import type { PullRequestSnapshot, RepoRef } from '../domain/pull-request';
-import { decideUpdate, updateEligibility } from '../domain/update-decision';
-import type { GitRunner } from '../git/command';
-import { rebaseOntoBase } from '../git/rebase';
-import type { GitHubClient } from '../github/client';
-import { ok } from '../result';
+import type { Logger } from '@/actions/logger';
+import type { Config } from '@/config/config';
+import { decideMerge } from '@/domain/merge-decision';
+import { isBehind, shouldProbeBehind } from '@/domain/merge-state';
+import type { MergeMethod } from '@/domain/methods';
+import type { PullRequestSnapshot, RepoRef } from '@/domain/pull-request';
+import { decideUpdate, updateEligibility } from '@/domain/update-decision';
+import type { GitRunner } from '@/git/command';
+import { rebaseOntoBase } from '@/git/rebase';
+import type { GitHubClient } from '@/github/client';
+import { ok } from '@/result';
+
 import { MAX_PULL_REQUESTS_PER_RUN } from './limits';
 import { mapSeries } from './map-series';
 import { resolvePullRequestSnapshot } from './resolve-state';

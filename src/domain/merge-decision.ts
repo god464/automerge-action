@@ -29,32 +29,25 @@ export function commitTitleFor(message: MergeCommitMessage, title: string): stri
 
 export function decideMerge(input: MergeInput): MergeDecision {
   const { pullRequest } = input;
-  if (pullRequest.state !== 'open') {
-    return { kind: 'skip', reason: 'not_open' };
-  }
-  if (pullRequest.merged) {
-    return { kind: 'skip', reason: 'already_merged' };
-  }
-  if (pullRequest.head.repoFullName == null) {
-    return { kind: 'skip', reason: 'head_repo_missing' };
-  }
+  if (pullRequest.state !== 'open') return { kind: 'skip', reason: 'not_open' };
+
+  if (pullRequest.merged) return { kind: 'skip', reason: 'already_merged' };
+
+  if (pullRequest.head.repoFullName == null) return { kind: 'skip', reason: 'head_repo_missing' };
 
   const labelReason = labelSkipReason(pullRequest.labels, input.filter);
-  if (labelReason != null) {
-    return { kind: 'skip', reason: labelReason };
-  }
+  if (labelReason != null) return { kind: 'skip', reason: labelReason };
 
   const classification = classifyMergeableState(pullRequest);
-  if (classification.kind === 'ready') {
+  if (classification.kind === 'ready')
     return {
       kind: 'ready',
       method: input.method,
       commitTitle: commitTitleFor(input.commitMessage, pullRequest.title),
     };
-  }
-  if (classification.kind === 'not_ready') {
+
+  if (classification.kind === 'not_ready')
     return { kind: 'not_ready', reason: classification.reason };
-  }
 
   return { kind: 'not_ready', reason: 'unknown' };
 }

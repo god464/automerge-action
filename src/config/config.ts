@@ -1,4 +1,4 @@
-import { type LabelFilter, parseLabelFilter } from '../domain/labels';
+import { type LabelFilter, parseLabelFilter } from '@/domain/labels';
 import {
   MERGE_COMMIT_MESSAGES,
   MERGE_METHODS,
@@ -6,8 +6,8 @@ import {
   type MergeMethod,
   UPDATE_METHODS,
   type UpdateMethod,
-} from '../domain/methods';
-import { err, ok, type Result } from '../result';
+} from '@/domain/methods';
+import { err, ok, type Result } from '@/result';
 
 export const INPUT_NAMES = [
   'github-token',
@@ -78,9 +78,7 @@ function parseEnums(inputs: ActionInputs): Result<ParsedEnums, readonly ConfigEr
     allowed: MERGE_METHODS,
     fallback: 'merge',
   });
-  if (!mergeMethod.ok) {
-    return mergeMethod;
-  }
+  if (!mergeMethod.ok) return mergeMethod;
 
   const mergeCommitMessage = parseEnum({
     inputs,
@@ -88,9 +86,7 @@ function parseEnums(inputs: ActionInputs): Result<ParsedEnums, readonly ConfigEr
     allowed: MERGE_COMMIT_MESSAGES,
     fallback: 'automatic',
   });
-  if (!mergeCommitMessage.ok) {
-    return mergeCommitMessage;
-  }
+  if (!mergeCommitMessage.ok) return mergeCommitMessage;
 
   const updateMethod = parseEnum({
     inputs,
@@ -98,9 +94,7 @@ function parseEnums(inputs: ActionInputs): Result<ParsedEnums, readonly ConfigEr
     allowed: UPDATE_METHODS,
     fallback: 'merge',
   });
-  if (!updateMethod.ok) {
-    return updateMethod;
-  }
+  if (!updateMethod.ok) return updateMethod;
 
   return ok({
     mergeMethod: mergeMethod.value,
@@ -111,14 +105,10 @@ function parseEnums(inputs: ActionInputs): Result<ParsedEnums, readonly ConfigEr
 
 export function parseConfig(inputs: ActionInputs): Result<Config, readonly ConfigError[]> {
   const token = inputs['github-token']?.trim() ?? '';
-  if (token.length === 0) {
-    return err([{ kind: 'missing_input', input: 'github-token' }]);
-  }
+  if (token.length === 0) return err([{ kind: 'missing_input', input: 'github-token' }]);
 
   const enums = parseEnums(inputs);
-  if (!enums.ok) {
-    return enums;
-  }
+  if (!enums.ok) return enums;
 
   const mergeLabels = parseLabelFilter(inputs['merge-labels'], 'automerge');
   const updateLabels = parseLabelFilter(inputs['update-labels'], 'automerge');

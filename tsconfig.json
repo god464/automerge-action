@@ -3,6 +3,7 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "types": ["node"],
+    "paths": { "@/*": ["./src/*"] },
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "noEmit": true,

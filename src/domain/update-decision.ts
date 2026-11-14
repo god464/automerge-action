@@ -24,24 +24,18 @@ export function updateEligibility(
   pullRequest: PullRequestSnapshot,
   filter: LabelFilter,
 ): UpdateSkipReason | null {
-  if (pullRequest.state !== 'open') {
-    return 'not_open';
-  }
-  if (pullRequest.merged) {
-    return 'already_merged';
-  }
-  if (pullRequest.head.repoFullName == null) {
-    return 'head_repo_missing';
-  }
+  if (pullRequest.state !== 'open') return 'not_open';
+
+  if (pullRequest.merged) return 'already_merged';
+
+  if (pullRequest.head.repoFullName == null) return 'head_repo_missing';
 
   return labelSkipReason(pullRequest.labels, filter);
 }
 
 export function decideUpdate(input: UpdateInput): UpdateDecision {
   const reason = updateEligibility(input.pullRequest, input.filter);
-  if (reason != null) {
-    return { kind: 'skip', reason };
-  }
+  if (reason != null) return { kind: 'skip', reason };
 
   return input.behind
     ? { kind: 'update', method: input.method }

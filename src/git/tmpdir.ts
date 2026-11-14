@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { rmRF } from '@actions/io';
 
-import { err, ok, type Result } from '../result';
+import { err, ok, type Result } from '@/result';
 
 export type TempDirError = { readonly kind: 'temp_dir_failed'; readonly message: string };
 
@@ -23,9 +23,7 @@ export async function withTempDir<T, E>(
   run: (path: string) => Promise<Result<T, E>>,
 ): Promise<Result<T, E | TempDirError>> {
   const created = await createTempDir();
-  if (!created.ok) {
-    return created;
-  }
+  if (!created.ok) return created;
 
   try {
     return await run(created.value);

@@ -1,7 +1,7 @@
 import { getExecOutput } from '@actions/exec';
 
-import type { Logger } from '../actions/logger';
-import { err, ok, type Result } from '../result';
+import type { Logger } from '@/actions/logger';
+import { err, ok, type Result } from '@/result';
 
 export interface GitOutput {
   readonly stdout: string;
@@ -51,14 +51,13 @@ export function createGitRunner(logger: Logger): GitRunner {
           ignoreReturnCode: true,
         });
 
-        if (!allowedExitCodes.includes(output.exitCode)) {
+        if (!allowedExitCodes.includes(output.exitCode))
           return err({
             kind: 'unexpected_exit',
             command,
             exitCode: output.exitCode,
             stderr: output.stderr.slice(0, 2000),
           });
-        }
 
         return ok({ stdout: output.stdout.trim(), exitCode: output.exitCode });
       } catch (error) {

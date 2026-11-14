@@ -1,5 +1,6 @@
-import type { RepoRef } from '../domain/pull-request';
-import { assertNever } from '../result';
+import type { RepoRef } from '@/domain/pull-request';
+import { assertNever } from '@/result';
+
 import type {
   CheckSuiteEvent,
   ParsedEvent,
@@ -75,14 +76,13 @@ function resolvePullRequestReview(event: PullRequestReviewEvent): EventTargets {
 }
 
 function resolveWorkflowRunPullRequest(event: WorkflowRunEvent): EventTargets {
-  if (event.pullRequests.length > 0) {
+  if (event.pullRequests.length > 0)
     return {
       kind: 'pull_requests',
       repo: event.repo,
       numbers: event.pullRequests.map((pullRequest) => pullRequest.number),
       mode: 'update_and_merge',
     };
-  }
 
   return event.headSha == null
     ? { kind: 'ignored', reason: 'workflow_run has no associated pull request' }
@@ -106,37 +106,29 @@ function resolveWorkflowRunPush(event: WorkflowRunEvent): EventTargets {
 }
 
 function resolveWorkflowRun(event: WorkflowRunEvent): EventTargets {
-  if (event.action !== 'completed') {
-    return { kind: 'not_ready', reason: 'check_incomplete' };
-  }
-  if (event.conclusion !== 'success') {
-    return { kind: 'not_ready', reason: 'check_failed' };
-  }
-  if (event.triggerEvent === 'pull_request') {
-    return resolveWorkflowRunPullRequest(event);
-  }
-  if (event.triggerEvent === 'push') {
-    return resolveWorkflowRunPush(event);
-  }
+  if (event.action !== 'completed') return { kind: 'not_ready', reason: 'check_incomplete' };
+
+  if (event.conclusion !== 'success') return { kind: 'not_ready', reason: 'check_failed' };
+
+  if (event.triggerEvent === 'pull_request') return resolveWorkflowRunPullRequest(event);
+
+  if (event.triggerEvent === 'push') return resolveWorkflowRunPush(event);
 
   return { kind: 'ignored', reason: `workflow_run event ignored: ${event.triggerEvent}` };
 }
 
 function resolveCheckSuite(event: CheckSuiteEvent): EventTargets {
-  if (event.action !== 'completed') {
-    return { kind: 'not_ready', reason: 'check_incomplete' };
-  }
-  if (event.conclusion !== 'success') {
-    return { kind: 'not_ready', reason: 'check_failed' };
-  }
-  if (event.pullRequests.length > 0) {
+  if (event.action !== 'completed') return { kind: 'not_ready', reason: 'check_incomplete' };
+
+  if (event.conclusion !== 'success') return { kind: 'not_ready', reason: 'check_failed' };
+
+  if (event.pullRequests.length > 0)
     return {
       kind: 'pull_requests',
       repo: event.repo,
       numbers: event.pullRequests.map((pullRequest) => pullRequest.number),
       mode: 'update_and_merge',
     };
-  }
 
   return event.headSha == null
     ? { kind: 'ignored', reason: 'check_suite has no associated pull request' }
