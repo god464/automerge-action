@@ -1,8 +1,6 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir as osTmpdir } from 'node:os';
 import { join } from 'node:path';
-
-import { rmRF } from '@actions/io';
 
 import { err, ok, type Result } from '@/result';
 
@@ -28,6 +26,6 @@ export async function withTempDir<T, E>(
   try {
     return await run(created.value);
   } finally {
-    await rmRF(created.value).catch(() => undefined);
+    await rm(created.value, { recursive: true, force: true }).catch(() => undefined);
   }
 }

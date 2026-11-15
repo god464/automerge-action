@@ -90,6 +90,41 @@ describe('parseEvent', () => {
       error: { kind: 'malformed' },
     });
   });
+
+  it.each([
+    ['pull_request', { action: 'labeled', repository: payloadRepository }],
+    ['pull_request_review', { action: 'submitted', repository: payloadRepository }],
+    ['workflow_run', { action: 'completed', repository: payloadRepository }],
+    ['check_suite', { action: 'completed', repository: payloadRepository }],
+    ['status', { state: 'success', repository: payloadRepository }],
+    ['status', { sha: 'sha', repository: payloadRepository }],
+    ['status', { state: 'success', sha: 'sha' }],
+    ['pull_request', null],
+    ['pull_request', 42],
+  ] as const)('rejects malformed %s payloads without throwing', (eventName, payload) => {
+    expect(parseEvent(eventName, payload)).toMatchObject({
+      ok: false,
+      error: { kind: 'malformed', eventName },
+    });
+  });
+
+  it('defaults non-array pull request lists to empty', () => {
+    const event = expectOk(
+      parseEvent('workflow_run', {
+        action: 'completed',
+        repository: payloadRepository,
+        workflow_run: {
+          conclusion: 'success',
+          event: 'push',
+          head_branch: 'main',
+          head_sha: 'sha',
+          pull_requests: 'not-an-array',
+        },
+      }),
+    );
+
+    expect(event.kind === 'workflow_run' ? event.pullRequests : null).toEqual([]);
+  });
 });
 
 describe('resolveTargets', () => {
@@ -251,6 +286,103 @@ describe('resolveTargets', () => {
     expect(resolveTargets(expectOk(parseEvent('push', {})))).toEqual({
       kind: 'unsupported',
       eventName: 'push',
+    });
+  });
+
+  it('ignores workflow runs that failed or have unrelated triggers', () => {
+    const failed = expectOk(
+      parseEvent('workflow_run', {
+        action: 'completed',
+        repository: payloadRepository,
+        workflow_run: { conclusion: 'failure', event: 'pull_request', pull_requests: [] },
+      }),
+    );
+    const other = expectOk(
+      parseEvent('workflow_run', {
+        action: 'completed',
+        repository: payloadRepository,
+        workflow_run: { conclusion: 'success', event: 'schedule', pull_requests: [] },
+      }),
+    );
+
+    expect(resolveTargets(failed)).toEqual({ kind: 'not_ready', reason: 'check_failed' });
+    expect(resolveTargets(other)).toEqual({
+      kind: 'ignored',
+      reason: 'workflow_run event ignored: schedule',
+    });
+  });
+
+  it('resolves check suites with attached pull requests', () => {
+    const event = expectOk(
+      parseEvent('check_suite', {
+        action: 'completed',
+        repository: payloadRepository,
+        check_suite: {
+          conclusion: 'success',
+          head_sha: 'sha',
+          pull_requests: [{ number: 4 }, { number: 5 }],
+        },
+      }),
+    );
+
+    expect(resolveTargets(event)).toEqual({
+      kind: 'pull_requests',
+      repo,
+      numbers: [4, 5],
+      mode: 'update_and_merge',
+    });
+  });
+
+  it('handles incomplete or unassociated check suites', () => {
+    const incomplete = expectOk(
+      parseEvent('check_suite', {
+        action: 'requested',
+        repository: payloadRepository,
+        check_suite: { conclusion: null, head_sha: 'sha', pull_requests: [] },
+      }),
+    );
+    const unassociated = expectOk(
+      parseEvent('check_suite', {
+        action: 'completed',
+        repository: payloadRepository,
+        check_suite: { conclusion: 'success', head_sha: null, pull_requests: [] },
+      }),
+    );
+
+    expect(resolveTargets(incomplete)).toEqual({ kind: 'not_ready', reason: 'check_incomplete' });
+    expect(resolveTargets(unassociated)).toEqual({
+      kind: 'ignored',
+      reason: 'check_suite has no associated pull request',
+    });
+  });
+
+  it('ignores pull request runs without a pull request or commit SHA', () => {
+    const event = expectOk(
+      parseEvent('workflow_run', {
+        action: 'completed',
+        repository: payloadRepository,
+        workflow_run: { conclusion: 'success', event: 'pull_request', pull_requests: [] },
+      }),
+    );
+
+    expect(resolveTargets(event)).toEqual({
+      kind: 'ignored',
+      reason: 'workflow_run has no associated pull request',
+    });
+  });
+
+  it('ignores push runs without a branch', () => {
+    const event = expectOk(
+      parseEvent('workflow_run', {
+        action: 'completed',
+        repository: payloadRepository,
+        workflow_run: { conclusion: 'success', event: 'push', pull_requests: [] },
+      }),
+    );
+
+    expect(resolveTargets(event)).toEqual({
+      kind: 'ignored',
+      reason: 'workflow_run push has no branch',
     });
   });
 });

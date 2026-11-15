@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { parseConfig } from '../src/config/config';
 import { matchesLabelFilter, parseLabelFilter } from '../src/domain/labels';
+import { assertNever } from '../src/result';
 import { expectOk } from './factories';
 
 describe('parseConfig', () => {
@@ -72,18 +73,30 @@ describe('parseConfig', () => {
     });
   });
 
-  it('rejects invalid enum values', () => {
-    expect(parseConfig({ 'github-token': 'token', 'merge-method': 'fast-forward' })).toEqual({
+  it.each([
+    ['merge-method', 'fast-forward', ['merge', 'squash', 'rebase']],
+    ['merge-commit-message', 'manual', ['automatic', 'pull-request-title']],
+    ['update-method', 'squash', ['merge', 'rebase']],
+  ] as const)('rejects invalid %s values', (input, value, allowed) => {
+    expect(parseConfig({ 'github-token': 'token', [input]: value })).toEqual({
       ok: false,
-      error: [
-        {
-          kind: 'invalid_enum',
-          input: 'merge-method',
-          value: 'fast-forward',
-          allowed: ['merge', 'squash', 'rebase'],
-        },
-      ],
+      error: [{ kind: 'invalid_enum', input, value, allowed }],
     });
+  });
+
+  it('reports conflicts for both label inputs', () => {
+    const config = expectOk(
+      parseConfig({
+        'github-token': 'token',
+        'merge-labels': 'automerge,!automerge',
+        'update-labels': 'ready,!ready',
+      }),
+    );
+
+    expect(config.labelConflicts).toEqual([
+      { input: 'merge-labels', label: 'automerge' },
+      { input: 'update-labels', label: 'ready' },
+    ]);
   });
 });
 
@@ -104,5 +117,11 @@ describe('labels', () => {
     const parsed = parseLabelFilter('automerge,!,', 'automerge');
 
     expect(parsed.filter).toEqual({ required: ['automerge'], blocking: [] });
+  });
+});
+
+describe('assertNever', () => {
+  it('throws for values outside the exhaustive union', () => {
+    expect(() => assertNever('unexpected' as never)).toThrow('Unexpected value: unexpected');
   });
 });

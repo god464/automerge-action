@@ -1,12 +1,13 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { createGitRunner } from '../src/git/command';
+import { createGitRunner, type GitRunner } from '../src/git/command';
 import { fetchUntilMergeBase, rebaseOntoBase } from '../src/git/rebase';
 import { withTempDir } from '../src/git/tmpdir';
-import { ok } from '../src/result';
+import { err, ok } from '../src/result';
 import { expectOk, pullRequest } from './factories';
 import { createFakeLogger } from './fakes';
 
@@ -129,4 +130,112 @@ describe('rebaseOntoBase', () => {
       expect(await run(origin, ['rev-parse', 'refs/heads/feature'])).toEqual(newSha);
     });
   }, 20_000);
+});
+
+describe('createGitRunner', () => {
+  it('returns trimmed stdout and the exit code', async () => {
+    const result = expectOk(await git.run('.', ['rev-parse', '--is-inside-work-tree']));
+
+    expect(result).toEqual({ stdout: 'true', exitCode: 0 });
+  });
+
+  it('reports unexpected exit codes with bounded stderr', async () => {
+    const result = await git.run('.', ['rev-parse', '--verify', 'refs/heads/does-not-exist']);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? null : result.error).toMatchObject({
+      kind: 'unexpected_exit',
+      command: 'git rev-parse --verify refs/heads/does-not-exist',
+      exitCode: 128,
+    });
+    expect(result.ok ? '' : result.error).toMatchObject({
+      stderr: expect.stringContaining('fatal'),
+    });
+  });
+
+  it('returns output for allowed non-zero exit codes', async () => {
+    const result = expectOk(
+      await git.run('.', ['rev-parse', '--verify', 'refs/heads/does-not-exist'], {
+        allowedExitCodes: [128],
+      }),
+    );
+
+    expect(result.exitCode).toEqual(128);
+  });
+
+  it('reports spawn failures', async () => {
+    const missingDirectory = join(tmpdir(), 'automerge-missing-directory');
+    const result = await git.run(missingDirectory, ['status']);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { kind: 'spawn_failed', command: 'git status' },
+    });
+    expect(result.ok ? '' : result.error).toMatchObject({
+      message: expect.stringContaining('ENOENT'),
+    });
+  });
+
+  it('terminates the whole process tree when a command times out', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'automerge-timeout-'));
+    const pidFile = join(dir, 'pid');
+    const started = Date.now();
+
+    try {
+      const result = await git.run(
+        dir,
+        ['-c', `alias.wait=!sh -c 'echo $$ > ${pidFile}; sleep 5'`, 'wait'],
+        { timeoutMs: 1000 },
+      );
+
+      expect(Date.now() - started).toBeLessThan(3000);
+      expect(result).toMatchObject({ ok: false, error: { kind: 'timed_out', timeoutMs: 1000 } });
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const pid = Number(await readFile(pidFile, 'utf8'));
+      expect(pid).toBeGreaterThan(0);
+      expect(() => process.kill(pid, 0)).toThrow('ESRCH');
+
+      expectOk(await git.run(dir, ['--version']));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('fetchUntilMergeBase deadlines', () => {
+  it('passes the remaining deadline to git commands', async () => {
+    const calls: { args: readonly string[]; timeoutMs: number | undefined }[] = [];
+    let clock = 0;
+    const fakeGit: GitRunner = {
+      run: async (_cwd, args, options) => {
+        calls.push({ args, timeoutMs: options?.timeoutMs });
+        if (args[0] === 'merge-base') {
+          clock = 400;
+          return ok({ stdout: '', exitCode: 1 });
+        }
+        clock = 1100;
+        return ok({ stdout: '', exitCode: 0 });
+      },
+    };
+    const deps = { git: fakeGit, logger, now: () => clock, cloneUrl: () => '' };
+
+    const result = await fetchUntilMergeBase(deps, '.', 'main', 1000);
+
+    expect(result).toEqual({ ok: false, error: { kind: 'timeout' } });
+    expect(calls.map((call) => call.args[0])).toEqual(['merge-base', 'fetch']);
+    expect(calls.map((call) => call.timeoutMs)).toEqual([1000, 600]);
+  });
+
+  it('maps a timed-out git subprocess to a timeout error', async () => {
+    const fakeGit: GitRunner = {
+      run: async () => err({ kind: 'timed_out', command: 'git merge-base', timeoutMs: 10 }),
+    };
+    const deps = { git: fakeGit, logger, now: () => 0, cloneUrl: () => '' };
+
+    expect(await fetchUntilMergeBase(deps, '.', 'main', 1000)).toEqual({
+      ok: false,
+      error: { kind: 'timeout' },
+    });
+  });
 });

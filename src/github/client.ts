@@ -11,13 +11,8 @@ export type GitHubError =
   | { readonly kind: 'network'; readonly message: string }
   | { readonly kind: 'invalid_response'; readonly message: string };
 
-export interface PullRequestSummary {
-  readonly number: number;
-}
-
 export interface PullRequestFilter {
-  readonly head?: string;
-  readonly base?: string;
+  readonly base: string;
   readonly perPage: number;
 }
 
@@ -52,11 +47,11 @@ export interface GitHubClient {
   readonly listOpenPullRequests: (
     repo: RepoRef,
     filter: PullRequestFilter,
-  ) => Promise<Result<readonly PullRequestSummary[], GitHubError>>;
+  ) => Promise<Result<readonly PullRequestSnapshot[], GitHubError>>;
   readonly listPullRequestsForCommit: (
     repo: RepoRef,
     sha: string,
-  ) => Promise<Result<readonly PullRequestSummary[], GitHubError>>;
+  ) => Promise<Result<readonly number[], GitHubError>>;
   readonly compareCommits: (
     repo: RepoRef,
     base: string,

@@ -3,6 +3,7 @@ import { assertNever, err, ok, type Result } from '@/result';
 
 import {
   type CheckSuiteEvent,
+  type CheckSuiteWebhook,
   EVENT_NAMES,
   type EventName,
   type EventParseError,
@@ -10,8 +11,12 @@ import {
   type PullRequestEvent,
   type PullRequestRef,
   type PullRequestReviewEvent,
+  type PullRequestReviewWebhook,
+  type PullRequestWebhook,
   type StatusEvent,
+  type StatusWebhook,
   type WorkflowRunEvent,
+  type WorkflowRunWebhook,
 } from './event';
 
 function recordOf(value: unknown): Readonly<Record<string, unknown>> | null {
@@ -62,50 +67,66 @@ function isSupportedEventName(value: string): value is EventName {
 function parsePullRequestEvent(
   payload: Readonly<Record<string, unknown>>,
 ): Result<PullRequestEvent, EventParseError> {
-  const action = stringField(payload, 'action');
   const pullRequest = recordOf(payload['pull_request']);
   const repo = repoFrom(payload['repository']);
   const number = pullRequest == null ? null : numberField(pullRequest, 'number');
 
-  if (action == null || repo == null || number == null)
+  if (stringField(payload, 'action') == null || repo == null || number == null)
     return malformed('pull_request', 'missing action, repository, or pull_request.number');
 
-  return ok({ kind: 'pull_request', action, repo, pullRequestNumber: number });
+  const event = payload as unknown as PullRequestWebhook;
+  return ok({
+    kind: 'pull_request',
+    action: event.action,
+    repo,
+    pullRequestNumber: event.pull_request.number,
+  });
 }
 
 function parsePullRequestReviewEvent(
   payload: Readonly<Record<string, unknown>>,
 ): Result<PullRequestReviewEvent, EventParseError> {
-  const action = stringField(payload, 'action');
   const review = recordOf(payload['review']);
   const pullRequest = recordOf(payload['pull_request']);
   const repo = repoFrom(payload['repository']);
   const reviewState = review == null ? null : stringField(review, 'state');
   const number = pullRequest == null ? null : numberField(pullRequest, 'number');
 
-  if (action == null || repo == null || reviewState == null || number == null)
+  if (
+    stringField(payload, 'action') == null ||
+    repo == null ||
+    reviewState == null ||
+    number == null
+  )
     return malformed(
       'pull_request_review',
       'missing action, review.state, repository, or pull_request.number',
     );
 
-  return ok({ kind: 'pull_request_review', action, reviewState, repo, pullRequestNumber: number });
+  const event = payload as unknown as PullRequestReviewWebhook;
+  return ok({
+    kind: 'pull_request_review',
+    action: event.action,
+    reviewState: event.review.state,
+    repo,
+    pullRequestNumber: event.pull_request.number,
+  });
 }
 
 function parseWorkflowRunEvent(
   payload: Readonly<Record<string, unknown>>,
 ): Result<WorkflowRunEvent, EventParseError> {
-  const action = stringField(payload, 'action');
   const workflowRun = recordOf(payload['workflow_run']);
   const repo = repoFrom(payload['repository']);
 
-  if (action == null || workflowRun == null || repo == null)
+  if (stringField(payload, 'action') == null || workflowRun == null || repo == null)
     return malformed('workflow_run', 'missing action, workflow_run, or repository');
 
+  const event = payload as unknown as WorkflowRunWebhook;
   return ok({
     kind: 'workflow_run',
-    action,
-    conclusion: stringField(workflowRun, 'conclusion'),
+    action: event.action,
+    conclusion: event.workflow_run.conclusion,
     triggerEvent: stringField(workflowRun, 'event'),
     headBranch: stringField(workflowRun, 'head_branch'),
     headSha: stringField(workflowRun, 'head_sha'),
@@ -117,17 +138,17 @@ function parseWorkflowRunEvent(
 function parseCheckSuiteEvent(
   payload: Readonly<Record<string, unknown>>,
 ): Result<CheckSuiteEvent, EventParseError> {
-  const action = stringField(payload, 'action');
   const checkSuite = recordOf(payload['check_suite']);
   const repo = repoFrom(payload['repository']);
 
-  if (action == null || checkSuite == null || repo == null)
+  if (stringField(payload, 'action') == null || checkSuite == null || repo == null)
     return malformed('check_suite', 'missing action, check_suite, or repository');
 
+  const event = payload as unknown as CheckSuiteWebhook;
   return ok({
     kind: 'check_suite',
-    action,
-    conclusion: stringField(checkSuite, 'conclusion'),
+    action: event.action,
+    conclusion: event.check_suite.conclusion,
     headSha: stringField(checkSuite, 'head_sha'),
     repo,
     pullRequests: readPullRequests(checkSuite['pull_requests']),
@@ -137,14 +158,14 @@ function parseCheckSuiteEvent(
 function parseStatusEvent(
   payload: Readonly<Record<string, unknown>>,
 ): Result<StatusEvent, EventParseError> {
-  const state = stringField(payload, 'state');
   const sha = stringField(payload, 'sha');
   const repo = repoFrom(payload['repository']);
 
-  if (state == null || sha == null || repo == null)
+  if (stringField(payload, 'state') == null || sha == null || repo == null)
     return malformed('status', 'missing state, sha, or repository');
 
-  return ok({ kind: 'status', state, sha, repo });
+  const event = payload as unknown as StatusWebhook;
+  return ok({ kind: 'status', state: event.state, sha: event.sha, repo });
 }
 
 export function parseEvent(

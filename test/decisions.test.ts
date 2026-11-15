@@ -76,6 +76,17 @@ describe('decideUpdate', () => {
     ).toEqual({ kind: 'skip', reason: 'not_behind' });
   });
 
+  it('returns eligibility skips before checking whether the pull request is behind', () => {
+    expect(
+      decideUpdate({
+        pullRequest: pullRequest({ state: 'closed' }),
+        filter,
+        behind: true,
+        method: 'merge',
+      }),
+    ).toEqual({ kind: 'skip', reason: 'not_open' });
+  });
+
   it('skips closed, merged, and deleted-fork pull requests', () => {
     expect(updateEligibility(pullRequest({ state: 'closed' }), filter)).toEqual('not_open');
     expect(updateEligibility(pullRequest({ merged: true }), filter)).toEqual('already_merged');

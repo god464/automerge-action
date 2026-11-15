@@ -1,4 +1,4 @@
-import { Octokit } from '@octokit/core';
+import type { GitHub } from '@actions/github/lib/utils';
 
 import type {
   BranchRef,
@@ -8,19 +8,9 @@ import type {
 } from '@/domain/pull-request';
 import { err, ok, type Result } from '@/result';
 
-import type {
-  CompareResult,
-  GitHubClient,
-  GitHubError,
-  MergeBaseResult,
-  PullRequestSummary,
-} from './client';
+import type { CompareResult, GitHubClient, GitHubError, MergeBaseResult } from './client';
 
-export interface GitHubClientOptions {
-  readonly token: string;
-  readonly baseUrl: string;
-  readonly userAgent?: string;
-}
+export type GitHubApi = InstanceType<typeof GitHub>;
 
 const KNOWN_MERGEABLE_STATES = [
   'clean',
@@ -133,24 +123,18 @@ function parsePullRequest(value: unknown): PullRequestSnapshot | null {
   };
 }
 
-function parseSummary(value: unknown): PullRequestSummary | null {
-  const record = recordOf(value);
-  const number = record == null ? null : numberField(record, 'number');
-  return number == null ? null : { number };
-}
-
-function parseSummaryList(value: unknown): readonly PullRequestSummary[] | null {
+function parsePullRequestList(value: unknown): readonly PullRequestSnapshot[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
 
   return value.flatMap((entry) => {
-    const summary = parseSummary(entry);
-    return summary == null ? [] : [summary];
+    const snapshot = parsePullRequest(entry);
+    return snapshot == null ? [] : [snapshot];
   });
 }
 
-function parseOpenSummaryList(value: unknown): readonly PullRequestSummary[] | null {
+function parseOpenNumberList(value: unknown): readonly number[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
@@ -160,8 +144,8 @@ function parseOpenSummaryList(value: unknown): readonly PullRequestSummary[] | n
     if (record == null || stringField(record, 'state') !== 'open') {
       return [];
     }
-    const summary = parseSummary(entry);
-    return summary == null ? [] : [summary];
+    const number = numberField(record, 'number');
+    return number == null ? [] : [number];
   });
 }
 
@@ -240,23 +224,17 @@ async function runRequest<T>(
   }
 }
 
-export function createGitHubClient(options: GitHubClientOptions): GitHubClient {
-  const octokit = new Octokit({
-    auth: options.token,
-    baseUrl: options.baseUrl,
-    userAgent: options.userAgent ?? 'god464/automerge-action',
-  });
-
+export function createGitHubClient(octokit: GitHubApi): GitHubClient {
   return {
     getPullRequest: (repo, number) =>
       runRequest(
         async () =>
           (
-            await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
+            await octokit.rest.pulls.get({
               owner: repo.owner,
               repo: repo.repo,
               pull_number: number,
-              headers: { 'If-None-Match': '' },
+              headers: { 'if-none-match': '' },
             })
           ).data,
         parsePullRequest,
@@ -266,38 +244,37 @@ export function createGitHubClient(options: GitHubClientOptions): GitHubClient {
       runRequest(
         async () =>
           (
-            await octokit.request('GET /repos/{owner}/{repo}/pulls', {
+            await octokit.rest.pulls.list({
               owner: repo.owner,
               repo: repo.repo,
               state: 'open',
               sort: 'updated',
               direction: 'desc',
               per_page: filter.perPage,
-              ...(filter.head == null ? {} : { head: filter.head }),
-              ...(filter.base == null ? {} : { base: filter.base }),
+              base: filter.base,
             })
           ).data,
-        parseSummaryList,
+        parsePullRequestList,
       ),
 
     listPullRequestsForCommit: (repo, sha) =>
       runRequest(
         async () =>
           (
-            await octokit.request('GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls', {
+            await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
               owner: repo.owner,
               repo: repo.repo,
               commit_sha: sha,
             })
           ).data,
-        parseOpenSummaryList,
+        parseOpenNumberList,
       ),
 
     compareCommits: (repo, base, head) =>
       runRequest(
         async () =>
           (
-            await octokit.request('GET /repos/{owner}/{repo}/compare/{basehead}', {
+            await octokit.rest.repos.compareCommitsWithBasehead({
               owner: repo.owner,
               repo: repo.repo,
               basehead: `${base}...${head}`,
@@ -310,7 +287,7 @@ export function createGitHubClient(options: GitHubClientOptions): GitHubClient {
       runRequest(
         async () =>
           (
-            await octokit.request('PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge', {
+            await octokit.rest.pulls.merge({
               owner: params.repo.owner,
               repo: params.repo.repo,
               pull_number: params.number,
@@ -325,7 +302,7 @@ export function createGitHubClient(options: GitHubClientOptions): GitHubClient {
 
     mergeBaseIntoHead: async (params) => {
       try {
-        const response = await octokit.request('POST /repos/{owner}/{repo}/merges', {
+        const response = await octokit.rest.repos.merge({
           owner: params.repo.owner,
           repo: params.repo.repo,
           base: params.headRef,

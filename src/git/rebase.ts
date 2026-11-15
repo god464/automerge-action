@@ -2,7 +2,7 @@ import type { Logger } from '@/actions/logger';
 import type { PullRequestSnapshot } from '@/domain/pull-request';
 import { err, ok, type Result } from '@/result';
 
-import type { GitError, GitRunner } from './command';
+import type { GitError, GitOutput, GitRunOptions, GitRunner } from './command';
 import { type TempDirError, withTempDir } from './tmpdir';
 
 export const FETCH_DEPTH = '10';
@@ -22,13 +22,32 @@ export interface RebaseDeps {
   readonly cloneUrl: (repoFullName: string) => string;
 }
 
+async function runGit(
+  deps: RebaseDeps,
+  dir: string,
+  args: readonly string[],
+  deadline: number,
+  options: GitRunOptions = {},
+): Promise<Result<GitOutput, RebaseError>> {
+  const remaining = deadline - deps.now();
+  if (remaining <= 0) return err({ kind: 'timeout' });
+
+  const result = await deps.git.run(dir, args, { ...options, timeoutMs: remaining });
+  if (result.ok) return result;
+
+  return result.error.kind === 'timed_out' ? err({ kind: 'timeout' }) : result;
+}
+
 async function mergeBasePair(
   deps: RebaseDeps,
   dir: string,
   left: string,
   right: string,
-): Promise<Result<string | null, GitError>> {
-  const result = await deps.git.run(dir, ['merge-base', left, right], { allowedExitCodes: [0, 1] });
+  deadline: number,
+): Promise<Result<string | null, RebaseError>> {
+  const result = await runGit(deps, dir, ['merge-base', left, right], deadline, {
+    allowedExitCodes: [0, 1],
+  });
   if (!result.ok) return result;
 
   return ok(result.value.exitCode === 1 ? null : result.value.stdout || null);
@@ -38,7 +57,8 @@ async function mergeBase(
   deps: RebaseDeps,
   dir: string,
   refs: readonly string[],
-): Promise<Result<string | null, GitError>> {
+  deadline: number,
+): Promise<Result<string | null, RebaseError>> {
   const first = refs[0];
   if (first == null)
     return err({
@@ -48,25 +68,24 @@ async function mergeBase(
       stderr: 'empty refs',
     });
 
-  if (refs.length === 1) return ok(first);
+  let current = first;
 
-  return refs.slice(1).reduce<Promise<Result<string | null, GitError>>>(
-    async (accumulatorPromise, ref) => {
-      const accumulator = await accumulatorPromise;
-      if (!accumulator.ok || accumulator.value == null) return accumulator;
+  for (const ref of refs.slice(1)) {
+    const pair = await mergeBasePair(deps, dir, current, ref, deadline);
+    if (!pair.ok || pair.value == null) return pair;
+    current = pair.value;
+  }
 
-      return mergeBasePair(deps, dir, accumulator.value, ref);
-    },
-    Promise.resolve(ok(first)),
-  );
+  return ok(current);
 }
 
 async function mergeCommits(
   deps: RebaseDeps,
   dir: string,
   ref: string,
-): Promise<Result<readonly (readonly string[])[], GitError>> {
-  const result = await deps.git.run(dir, ['rev-list', '--parents', `${ref}..HEAD`]);
+  deadline: number,
+): Promise<Result<readonly (readonly string[])[], RebaseError>> {
+  const result = await runGit(deps, dir, ['rev-list', '--parents', `${ref}..HEAD`], deadline);
   if (!result.ok) return result;
 
   return ok(
@@ -81,17 +100,19 @@ async function findEarliestBase(
   deps: RebaseDeps,
   dir: string,
   ref: string,
-): Promise<Result<string | null, GitError>> {
-  const base = await mergeBase(deps, dir, ['HEAD', ref]);
+  deadline: number,
+): Promise<Result<string | null, RebaseError>> {
+  const base = await mergeBase(deps, dir, ['HEAD', ref], deadline);
   if (!base.ok) return base;
 
   if (base.value == null) return ok(null);
 
-  const commits = await mergeCommits(deps, dir, ref);
+  const commits = await mergeCommits(deps, dir, ref, deadline);
   if (!commits.ok) return commits;
 
+  const parents = [...new Set(commits.value.flat())];
   const parentResults = await Promise.all(
-    commits.value.flat().map((parent) => mergeBase(deps, dir, [parent, ref])),
+    parents.map((parent) => mergeBase(deps, dir, [parent, ref], deadline)),
   );
   const errors = parentResults.flatMap((result) => (result.ok ? [] : [result.error]));
   const firstError = errors[0];
@@ -102,11 +123,9 @@ async function findEarliestBase(
   const bases = parentResults.flatMap((result) =>
     result.ok && result.value != null ? [result.value] : [],
   );
-  const uniqueBases = [base.value, ...bases].filter(
-    (value, index, all) => all.indexOf(value) === index,
-  );
+  const uniqueBases = [...new Set([base.value, ...bases])];
 
-  return mergeBase(deps, dir, uniqueBases);
+  return mergeBase(deps, dir, uniqueBases, deadline);
 }
 
 export async function fetchUntilMergeBase(
@@ -118,30 +137,22 @@ export async function fetchUntilMergeBase(
   const deadline = deps.now() + timeoutMs;
   const ref = `refs/remotes/origin/${branch}`;
 
-  async function attempt(): Promise<Result<string, RebaseError>> {
-    if (deps.now() >= deadline) {
-      return err({ kind: 'timeout' });
-    }
-
-    const common = await findEarliestBase(deps, dir, ref);
+  while (deps.now() < deadline) {
+    const common = await findEarliestBase(deps, dir, ref, deadline);
     if (!common.ok) return common;
 
     if (common.value != null) return ok(common.value);
 
-    const deepen = await deps.git.run(dir, [
-      'fetch',
-      '--quiet',
-      '--deepen',
-      FETCH_DEPTH,
-      'origin',
-      `${branch}:${ref}`,
-    ]);
+    const deepen = await runGit(
+      deps,
+      dir,
+      ['fetch', '--quiet', '--no-tags', '--deepen', FETCH_DEPTH, 'origin', `${branch}:${ref}`],
+      deadline,
+    );
     if (!deepen.ok) return deepen;
-
-    return attempt();
   }
 
-  return attempt();
+  return err({ kind: 'timeout' });
 }
 
 export async function rebaseOntoBase(
@@ -157,7 +168,7 @@ export async function rebaseOntoBase(
       [
         'clone',
         '--quiet',
-        '--shallow-submodules',
+        '--no-tags',
         '--branch',
         pullRequest.head.ref,
         '--depth',
@@ -172,6 +183,7 @@ export async function rebaseOntoBase(
     const fetch = await deps.git.run(dir, [
       'fetch',
       '--quiet',
+      '--no-tags',
       '--depth',
       FETCH_DEPTH,
       'origin',

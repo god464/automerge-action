@@ -9,7 +9,6 @@ import type {
   MergeBaseResult,
   MergePullRequestParams,
   PullRequestFilter,
-  PullRequestSummary,
 } from '../src/github/client';
 import { ok, type Result } from '../src/result';
 import { pullRequest } from './factories';
@@ -35,11 +34,11 @@ export interface FakeClientOptions {
   readonly listOpenPullRequests?: (
     repo: RepoRef,
     filter: PullRequestFilter,
-  ) => Promise<Result<readonly PullRequestSummary[], GitHubError>>;
+  ) => Promise<Result<readonly PullRequestSnapshot[], GitHubError>>;
   readonly listPullRequestsForCommit?: (
     repo: RepoRef,
     sha: string,
-  ) => Promise<Result<readonly PullRequestSummary[], GitHubError>>;
+  ) => Promise<Result<readonly number[], GitHubError>>;
   readonly compareCommits?: (
     repo: RepoRef,
     base: string,

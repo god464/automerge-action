@@ -1,13 +1,12 @@
+import type { PullRequestSnapshot } from '@/domain/pull-request';
+
 import type { ParsedEvent } from '../events/event';
 import type { EventTargets } from '../events/targets';
 import { resolveTargets } from '../events/targets';
 import { assertNever } from '../result';
 import { MAX_PULL_REQUESTS_PER_RUN } from './limits';
-import { mapSeries } from './map-series';
 import { type ProcessDeps, processPullRequest } from './process-pull-request';
 import { type RunReport, type RunResult, skippedReport } from './result';
-
-export type RunDeps = ProcessDeps;
 
 function reportOf(results: readonly RunResult[]): RunReport {
   return {
@@ -17,30 +16,40 @@ function reportOf(results: readonly RunResult[]): RunReport {
 }
 
 function uniqueNumbers(numbers: readonly number[]): readonly number[] {
-  return numbers
-    .filter((number, index) => numbers.indexOf(number) === index)
-    .slice(0, MAX_PULL_REQUESTS_PER_RUN);
+  return [...new Set(numbers)].slice(0, MAX_PULL_REQUESTS_PER_RUN);
+}
+
+function uniquePullRequests(
+  pullRequests: readonly PullRequestSnapshot[],
+): readonly PullRequestSnapshot[] {
+  const seen = new Set<number>();
+  const unique: PullRequestSnapshot[] = [];
+
+  for (const pullRequest of pullRequests) {
+    if (seen.has(pullRequest.number)) continue;
+    seen.add(pullRequest.number);
+    unique.push(pullRequest);
+    if (unique.length === MAX_PULL_REQUESTS_PER_RUN) break;
+  }
+
+  return unique;
 }
 
 async function executePullRequests(
-  deps: RunDeps,
+  deps: ProcessDeps,
   target: Extract<EventTargets, { readonly kind: 'pull_requests' }>,
 ): Promise<RunReport> {
   const numbers = uniqueNumbers(target.numbers);
-  if (numbers.length === 0) {
-    deps.logger.info('No pull requests found for event');
-    return skippedReport();
+  const results: RunResult[] = [];
+  for (const number of numbers) {
+    results.push(await processPullRequest(deps, target.repo, number, target.mode));
   }
 
-  return reportOf(
-    await mapSeries(numbers, (number) =>
-      processPullRequest(deps, target.repo, number, target.mode),
-    ),
-  );
+  return reportOf(results);
 }
 
 async function executeByCommit(
-  deps: RunDeps,
+  deps: ProcessDeps,
   target: Extract<EventTargets, { readonly kind: 'pull_requests_by_commit' }>,
 ): Promise<RunReport> {
   const summaries = await deps.client.listPullRequestsForCommit(target.repo, target.sha);
@@ -51,21 +60,22 @@ async function executeByCommit(
     return skippedReport();
   }
 
-  const numbers = uniqueNumbers(summaries.value.map((summary) => summary.number));
+  const numbers = uniqueNumbers(summaries.value);
   if (numbers.length === 0) {
     deps.logger.info(`No open pull requests associated with commit ${target.sha}`);
     return skippedReport();
   }
 
-  return reportOf(
-    await mapSeries(numbers, (number) =>
-      processPullRequest(deps, target.repo, number, target.mode),
-    ),
-  );
+  const results: RunResult[] = [];
+  for (const number of numbers) {
+    results.push(await processPullRequest(deps, target.repo, number, target.mode));
+  }
+
+  return reportOf(results);
 }
 
 async function executeByBase(
-  deps: RunDeps,
+  deps: ProcessDeps,
   target: Extract<EventTargets, { readonly kind: 'pull_requests_by_base' }>,
 ): Promise<RunReport> {
   const summaries = await deps.client.listOpenPullRequests(target.repo, {
@@ -79,20 +89,20 @@ async function executeByBase(
     return skippedReport();
   }
 
-  const numbers = uniqueNumbers(summaries.value.map((summary) => summary.number));
-  if (numbers.length === 0) {
+  const pullRequests = uniquePullRequests(summaries.value);
+  if (pullRequests.length === 0) {
     deps.logger.info(`No open pull requests based on ${target.base}`);
     return skippedReport();
   }
 
-  const results = await mapSeries(numbers, (number) =>
-    processPullRequest(deps, target.repo, number, target.mode),
-  );
-  deps.logger.info(`Processed ${results.length} pull request(s) based on ${target.base}`);
+  for (const pullRequest of pullRequests) {
+    await processPullRequest(deps, target.repo, pullRequest.number, target.mode, pullRequest);
+  }
+  deps.logger.info(`Processed ${pullRequests.length} pull request(s) based on ${target.base}`);
   return skippedReport();
 }
 
-async function executeTarget(deps: RunDeps, target: EventTargets): Promise<RunReport> {
+async function executeTarget(deps: ProcessDeps, target: EventTargets): Promise<RunReport> {
   switch (target.kind) {
     case 'pull_request':
       return reportOf([await processPullRequest(deps, target.repo, target.number, target.mode)]);
@@ -120,6 +130,6 @@ async function executeTarget(deps: RunDeps, target: EventTargets): Promise<RunRe
   }
 }
 
-export async function runFromEvent(deps: RunDeps, event: ParsedEvent): Promise<RunReport> {
+export async function runFromEvent(deps: ProcessDeps, event: ParsedEvent): Promise<RunReport> {
   return executeTarget(deps, resolveTargets(event));
 }

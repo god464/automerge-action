@@ -7,11 +7,10 @@ import type { PullRequestSnapshot, RepoRef } from '@/domain/pull-request';
 import { decideUpdate, updateEligibility } from '@/domain/update-decision';
 import type { GitRunner } from '@/git/command';
 import { rebaseOntoBase } from '@/git/rebase';
-import type { GitHubClient } from '@/github/client';
-import { ok } from '@/result';
+import type { GitHubClient, GitHubError } from '@/github/client';
+import { ok, type Result } from '@/result';
 
 import { MAX_PULL_REQUESTS_PER_RUN } from './limits';
-import { mapSeries } from './map-series';
 import { resolvePullRequestSnapshot } from './resolve-state';
 import type { RunResult } from './result';
 
@@ -25,15 +24,7 @@ export interface ProcessDeps {
   readonly cloneUrl: (repoFullName: string) => string;
 }
 
-type UpdateOutcome =
-  | { readonly kind: 'updated'; readonly sha: string }
-  | { readonly kind: 'up_to_date' }
-  | { readonly kind: 'failed' };
-
-async function applyUpdate(
-  deps: ProcessDeps,
-  pullRequest: PullRequestSnapshot,
-): Promise<UpdateOutcome> {
+async function applyUpdate(deps: ProcessDeps, pullRequest: PullRequestSnapshot): Promise<void> {
   if (deps.config.updateMethod === 'merge') {
     const result = await deps.client.mergeBaseIntoHead({
       repo: pullRequest.repo,
@@ -44,14 +35,14 @@ async function applyUpdate(
       deps.logger.warning(
         `Failed to update PR #${pullRequest.number} via merge: ${result.error.kind}`,
       );
-      return { kind: 'failed' };
+      return;
     }
     if (result.value.kind === 'up_to_date') {
       deps.logger.info(`PR #${pullRequest.number} is already up to date`);
-      return { kind: 'up_to_date' };
+      return;
     }
     deps.logger.info(`Updated PR #${pullRequest.number} to ${result.value.sha}`);
-    return { kind: 'updated', sha: result.value.sha };
+    return;
   }
 
   const result = await rebaseOntoBase(
@@ -60,15 +51,14 @@ async function applyUpdate(
   );
   if (!result.ok) {
     deps.logger.warning(`Failed to rebase PR #${pullRequest.number}: ${result.error.kind}`);
-    return { kind: 'failed' };
+    return;
   }
   if (result.value == null) {
     deps.logger.info(`PR #${pullRequest.number} is already up to date`);
-    return { kind: 'up_to_date' };
+    return;
   }
 
   deps.logger.info(`Rebased PR #${pullRequest.number} to ${result.value}`);
-  return { kind: 'updated', sha: result.value };
 }
 
 async function resolveBehind(
@@ -213,20 +203,23 @@ async function updateOtherPullRequests(
     return;
   }
 
-  const numbers = summaries.value
-    .map((summary) => summary.number)
-    .filter((number) => number !== merged.number)
-    .filter((number, index, all) => all.indexOf(number) === index)
-    .slice(0, MAX_PULL_REQUESTS_PER_RUN);
-  if (numbers.length === 0) {
+  const seen = new Set<number>();
+  let processed = 0;
+
+  for (const pullRequest of summaries.value) {
+    if (pullRequest.number === merged.number || seen.has(pullRequest.number)) continue;
+    if (processed === MAX_PULL_REQUESTS_PER_RUN) break;
+
+    seen.add(pullRequest.number);
+    await processPullRequest(deps, merged.repo, pullRequest.number, 'update_only', pullRequest);
+    processed += 1;
+  }
+
+  if (processed === 0) {
     deps.logger.debug(`No other open pull requests based on ${merged.base.ref}`);
     return;
   }
-
-  const results = await mapSeries(numbers, (number) =>
-    processPullRequest(deps, merged.repo, number, 'update_only'),
-  );
-  deps.logger.info(`Processed ${results.length} other pull request(s) based on ${merged.base.ref}`);
+  deps.logger.info(`Processed ${processed} other pull request(s) based on ${merged.base.ref}`);
 }
 
 export async function processPullRequest(
@@ -234,8 +227,25 @@ export async function processPullRequest(
   repo: RepoRef,
   number: number,
   mode: 'update_and_merge' | 'update_only',
+  existingSnapshot?: PullRequestSnapshot,
 ): Promise<RunResult> {
-  const snapshot = await resolvePullRequestSnapshot(deps, repo, number);
+  if (existingSnapshot != null && mode === 'update_only') {
+    const ineligible = updateEligibility(existingSnapshot, deps.config.updateLabels);
+    if (ineligible != null) {
+      deps.logger.info(`Skipping update for PR #${number}: ${ineligible}`);
+      return { result: 'skipped', pullRequestNumber: undefined };
+    }
+  }
+
+  let snapshot: Result<PullRequestSnapshot, GitHubError>;
+  if (existingSnapshot != null && existingSnapshot.mergeableState != null) {
+    snapshot = ok(existingSnapshot);
+  } else if (mode === 'update_only') {
+    snapshot = await deps.client.getPullRequest(repo, number);
+  } else {
+    snapshot = await resolvePullRequestSnapshot(deps, repo, number);
+  }
+
   if (!snapshot.ok) {
     deps.logger.warning(`Failed to fetch PR #${number}: ${snapshot.error.kind}`);
     return { result: 'skipped', pullRequestNumber: number };

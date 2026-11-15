@@ -4,6 +4,7 @@ import { assertNever } from '@/result';
 import type {
   CheckSuiteEvent,
   ParsedEvent,
+  PullRequestAction,
   PullRequestEvent,
   PullRequestReviewEvent,
   StatusEvent,
@@ -19,7 +20,7 @@ export const RELEVANT_PULL_REQUEST_ACTIONS = [
   'ready_for_review',
   'reopened',
   'unlocked',
-] as const;
+] as const satisfies readonly PullRequestAction[];
 
 export type EventTargets =
   | {
