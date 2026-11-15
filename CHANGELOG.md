@@ -2,10 +2,9 @@
 
 ## [1.0.2](https://github.com/god464/automerge-action/compare/v1.0.1...v1.0.2) (2026-11-15)
 
-
 ### Bug Fixes
 
-* harden action execution and simplify internals ([bf9225e](https://github.com/god464/automerge-action/commit/bf9225e7ca873469ea72a3ac3b3ad28f6b15dcba))
+- harden action execution and simplify internals ([bf9225e](https://github.com/god464/automerge-action/commit/bf9225e7ca873469ea72a3ac3b3ad28f6b15dcba))
 
 ## [1.0.1](https://github.com/god464/automerge-action/compare/v1.0.0...v1.0.1) (2026-11-11)
 
