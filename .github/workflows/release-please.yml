@@ -34,6 +34,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           branch=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
             --label 'autorelease: pending' \
             --json headRefName \
             --jq '.[0].headRefName')
