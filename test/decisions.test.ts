@@ -5,6 +5,7 @@ import { commitTitleFor, decideMerge } from '@/domain/merge-decision';
 import { classifyMergeableState, isBehind, shouldProbeBehind } from '@/domain/merge-state';
 import type { MergeableState } from '@/domain/pull-request';
 import { decideUpdate, updateEligibility } from '@/domain/update-decision';
+
 import { pullRequest } from './factories';
 
 const filter: LabelFilter = { required: ['automerge'], blocking: ['wip'] };

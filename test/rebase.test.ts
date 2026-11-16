@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { GitError, GitOutput, GitRunner } from '@/git/command';
 import { rebaseOntoBase } from '@/git/rebase';
 import { err, ok, type Result } from '@/result';
+
 import { pullRequest } from './factories';
 import { createFakeLogger } from './fakes';
 

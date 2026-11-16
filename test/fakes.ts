@@ -11,6 +11,7 @@ import type {
   PullRequestFilter,
 } from '@/github/client';
 import { ok, type Result } from '@/result';
+
 import { pullRequest } from './factories';
 
 export interface FakeClientCalls {

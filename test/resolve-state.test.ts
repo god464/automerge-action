@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { PullRequestSnapshot } from '@/domain/pull-request';
 import { err, ok } from '@/result';
 import { resolvePullRequestSnapshot } from '@/run/resolve-state';
+
 import { expectOk, pullRequest } from './factories';
 import { createFakeClient, createFakeLogger, createFakeSleep } from './fakes';
 

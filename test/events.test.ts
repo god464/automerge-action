@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { parseEvent } from '@/events/parse';
 import { resolveTargets } from '@/events/targets';
+
 import { expectOk } from './factories';
 
 const repo = { owner: 'owner', repo: 'repo' };

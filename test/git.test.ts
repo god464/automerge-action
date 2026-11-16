@@ -8,6 +8,7 @@ import { createGitRunner, type GitRunner } from '@/git/command';
 import { fetchUntilMergeBase, rebaseOntoBase } from '@/git/rebase';
 import { withTempDir } from '@/git/tmpdir';
 import { err, ok } from '@/result';
+
 import { expectOk, pullRequest } from './factories';
 import { createFakeLogger } from './fakes';
 
