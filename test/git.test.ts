@@ -4,10 +4,10 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { createGitRunner, type GitRunner } from '../src/git/command';
-import { fetchUntilMergeBase, rebaseOntoBase } from '../src/git/rebase';
-import { withTempDir } from '../src/git/tmpdir';
-import { err, ok } from '../src/result';
+import { createGitRunner, type GitRunner } from '@/git/command';
+import { fetchUntilMergeBase, rebaseOntoBase } from '@/git/rebase';
+import { withTempDir } from '@/git/tmpdir';
+import { err, ok } from '@/result';
 import { expectOk, pullRequest } from './factories';
 import { createFakeLogger } from './fakes';
 

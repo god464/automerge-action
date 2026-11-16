@@ -1,4 +1,4 @@
-import type { OutputSink } from '../actions/outputs';
+import type { OutputSink } from '@/actions/outputs';
 import type { RunReport } from './result';
 
 export const OUTPUT_MERGE_RESULT = 'merge-result';

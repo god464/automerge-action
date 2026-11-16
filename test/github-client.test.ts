@@ -1,7 +1,7 @@
 import * as github from '@actions/github';
 import { describe, expect, it } from 'vitest';
 
-import { createGitHubClient } from '../src/github/octokit-client';
+import { createGitHubClient } from '@/github/octokit-client';
 import { expectOk } from './factories';
 
 const repo = { owner: 'owner', repo: 'repo' };

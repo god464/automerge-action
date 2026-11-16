@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseConfig } from '../src/config/config';
-import { matchesLabelFilter, parseLabelFilter } from '../src/domain/labels';
-import { assertNever } from '../src/result';
+import { parseConfig } from '@/config/config';
+import { matchesLabelFilter, parseLabelFilter } from '@/domain/labels';
+import { assertNever } from '@/result';
 import { expectOk } from './factories';
 
 describe('parseConfig', () => {

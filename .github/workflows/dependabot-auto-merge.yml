@@ -42,10 +42,8 @@ jobs:
         if: steps.pull-request.outputs.number != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge --squash "${{ steps.pull-request.outputs.number }}"
-
-      # The merge above uses GITHUB_TOKEN, so its push event does not trigger
-      # release-please. workflow_dispatch is the documented exception.
+          STEPS_PULL_REQUEST_OUTPUTS_NUMBER: ${{ steps.pull-request.outputs.number }}
+        run: gh pr merge --squash "${STEPS_PULL_REQUEST_OUTPUTS_NUMBER}"
       - name: Ask release-please to inspect the new main commit
         if: steps.pull-request.outputs.number != ''
         env:

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GitError, GitOutput, GitRunner } from '../src/git/command';
-import { rebaseOntoBase } from '../src/git/rebase';
-import { err, ok, type Result } from '../src/result';
+import type { GitError, GitOutput, GitRunner } from '@/git/command';
+import { rebaseOntoBase } from '@/git/rebase';
+import { err, ok, type Result } from '@/result';
 import { pullRequest } from './factories';
 import { createFakeLogger } from './fakes';
 

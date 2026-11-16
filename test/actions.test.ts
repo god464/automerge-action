@@ -1,9 +1,9 @@
 import * as core from '@actions/core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { readActionInputs } from '../src/actions/inputs';
-import { actionsLogger } from '../src/actions/logger';
-import { actionsOutputs } from '../src/actions/outputs';
+import { readActionInputs } from '@/actions/inputs';
+import { actionsLogger } from '@/actions/logger';
+import { actionsOutputs } from '@/actions/outputs';
 
 vi.mock('@actions/core', () => ({
   debug: vi.fn<(message: string) => void>(),

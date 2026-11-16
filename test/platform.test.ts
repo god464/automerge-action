@@ -3,7 +3,7 @@ import process from 'node:process';
 import * as core from '@actions/core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createPlatform } from '../src/platform';
+import { createPlatform } from '@/platform';
 
 vi.mock('@actions/core', () => ({
   debug: vi.fn<(message: string) => void>(),

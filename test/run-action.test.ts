@@ -4,8 +4,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ok } from '../src/result';
-import { type ActionPlatform, readEvent, runAction } from '../src/run-action';
+import { ok } from '@/result';
+import { type ActionPlatform, readEvent, runAction } from '@/run-action';
 import { createFakeClient, createFakeLogger, createUnusedGitRunner } from './fakes';
 
 const pullRequestPayload = {

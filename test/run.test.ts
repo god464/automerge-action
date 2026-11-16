@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PullRequestSnapshot } from '../src/domain/pull-request';
-import type { ParsedEvent } from '../src/events/event';
-import { err, ok } from '../src/result';
-import type { ProcessDeps } from '../src/run/process-pull-request';
-import { processPullRequest } from '../src/run/process-pull-request';
-import { runFromEvent } from '../src/run/run';
+import type { PullRequestSnapshot } from '@/domain/pull-request';
+import type { ParsedEvent } from '@/events/event';
+import { err, ok } from '@/result';
+import type { ProcessDeps } from '@/run/process-pull-request';
+import { processPullRequest } from '@/run/process-pull-request';
+import { runFromEvent } from '@/run/run';
 import { config, pullRequest } from './factories';
 import {
   createFakeClient,

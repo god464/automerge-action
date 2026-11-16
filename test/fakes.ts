@@ -1,6 +1,6 @@
-import type { Logger } from '../src/actions/logger';
-import type { PullRequestSnapshot, RepoRef } from '../src/domain/pull-request';
-import type { GitRunner } from '../src/git/command';
+import type { Logger } from '@/actions/logger';
+import type { PullRequestSnapshot, RepoRef } from '@/domain/pull-request';
+import type { GitRunner } from '@/git/command';
 import type {
   CompareResult,
   GitHubClient,
@@ -9,8 +9,8 @@ import type {
   MergeBaseResult,
   MergePullRequestParams,
   PullRequestFilter,
-} from '../src/github/client';
-import { ok, type Result } from '../src/result';
+} from '@/github/client';
+import { ok, type Result } from '@/result';
 import { pullRequest } from './factories';
 
 export interface FakeClientCalls {

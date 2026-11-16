@@ -4,8 +4,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { withTempDir } from '../src/git/tmpdir';
-import { err, ok } from '../src/result';
+import { withTempDir } from '@/git/tmpdir';
+import { err, ok } from '@/result';
 import { expectOk } from './factories';
 
 describe('withTempDir', () => {
