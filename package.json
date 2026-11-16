@@ -25,7 +25,7 @@
     "@octokit/openapi-webhooks-types": "^12.2.0",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.0",
-    "oxfmt": "^0.77.0",
+    "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2007",
     "tsdown": "^0.23.7",
