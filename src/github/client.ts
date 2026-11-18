@@ -5,6 +5,7 @@ import type { Result } from '@/result';
 export type GitHubError =
   | { readonly kind: 'not_found'; readonly message: string }
   | { readonly kind: 'conflict'; readonly message: string }
+  | { readonly kind: 'validation'; readonly message: string }
   | { readonly kind: 'forbidden'; readonly message: string }
   | { readonly kind: 'rate_limited'; readonly message: string }
   | { readonly kind: 'server'; readonly status: number; readonly message: string }

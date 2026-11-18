@@ -37,12 +37,9 @@ function numberField(record: Record<string, unknown>, key: string): number | nul
   return typeof value === 'number' && Number.isInteger(value) ? value : null;
 }
 
-function parseMergeableState(value: unknown): MergeableState | null {
+function parseMergeableState(value: string | null): MergeableState | null {
   if (value == null) {
     return null;
-  }
-  if (typeof value !== 'string') {
-    return 'other';
   }
 
   return (KNOWN_MERGEABLE_STATES as readonly string[]).includes(value)
@@ -79,16 +76,20 @@ function parseBranch(value: unknown): BranchRef | null {
   return { ref, sha, repoFullName: repo == null ? null : stringField(repo, 'full_name') };
 }
 
-function parseLabels(value: unknown): readonly string[] {
+function parseLabels(value: unknown): readonly string[] | null {
   if (!Array.isArray(value)) {
-    return [];
+    return null;
   }
 
-  return value.flatMap((entry) => {
+  const labels: string[] = [];
+  for (const entry of value) {
     const record = recordOf(entry);
     const name = record == null ? null : stringField(record, 'name');
-    return name == null ? [] : [name];
-  });
+    if (name == null) return null;
+    labels.push(name);
+  }
+
+  return labels;
 }
 
 function parsePullRequest(value: unknown): PullRequestSnapshot | null {
@@ -99,25 +100,54 @@ function parsePullRequest(value: unknown): PullRequestSnapshot | null {
 
   const number = numberField(record, 'number');
   const state = stringField(record, 'state');
+  const title = stringField(record, 'title');
   const baseRecord = recordOf(record['base']);
   const baseRepo = baseRecord == null ? null : parseRepo(baseRecord['repo']);
   const head = parseBranch(record['head']);
   const base = parseBranch(record['base']);
+  const labels = parseLabels(record['labels']);
 
-  if (number == null || state == null || baseRepo == null || head == null || base == null) {
+  if (
+    number == null ||
+    number <= 0 ||
+    title == null ||
+    (state !== 'open' && state !== 'closed') ||
+    baseRepo == null ||
+    head == null ||
+    base == null ||
+    labels == null
+  ) {
     return null;
   }
+
+  const merged = record['merged'];
+  const draft = record['draft'];
+  const mergeableValue = record['mergeable'];
+  const mergeableStateValue = record['mergeable_state'];
+
+  if (merged !== undefined && typeof merged !== 'boolean') return null;
+  if (draft !== undefined && typeof draft !== 'boolean') return null;
+  if (mergeableValue !== undefined && mergeableValue !== null && typeof mergeableValue !== 'boolean')
+    return null;
+  if (
+    mergeableStateValue !== undefined &&
+    mergeableStateValue !== null &&
+    typeof mergeableStateValue !== 'string'
+  )
+    return null;
 
   return {
     repo: baseRepo,
     number,
-    title: stringField(record, 'title') ?? '',
-    state: state === 'open' ? 'open' : 'closed',
-    merged: record['merged'] === true,
-    draft: record['draft'] === true,
-    mergeable: typeof record['mergeable'] === 'boolean' ? record['mergeable'] : null,
-    mergeableState: parseMergeableState(record['mergeable_state']),
-    labels: parseLabels(record['labels']),
+    title,
+    state,
+    merged: merged === true,
+    draft: draft === true,
+    mergeable: typeof mergeableValue === 'boolean' ? mergeableValue : null,
+    mergeableState: parseMergeableState(
+      typeof mergeableStateValue === 'string' ? mergeableStateValue : null,
+    ),
+    labels,
     head,
     base,
   };
@@ -128,10 +158,14 @@ function parsePullRequestList(value: unknown): readonly PullRequestSnapshot[] | 
     return null;
   }
 
-  return value.flatMap((entry) => {
+  const snapshots: PullRequestSnapshot[] = [];
+  for (const entry of value) {
     const snapshot = parsePullRequest(entry);
-    return snapshot == null ? [] : [snapshot];
-  });
+    if (snapshot == null) return null;
+    snapshots.push(snapshot);
+  }
+
+  return snapshots;
 }
 
 function parseOpenNumberList(value: unknown): readonly number[] | null {
@@ -139,14 +173,17 @@ function parseOpenNumberList(value: unknown): readonly number[] | null {
     return null;
   }
 
-  return value.flatMap((entry) => {
+  const openNumbers: number[] = [];
+  for (const entry of value) {
     const record = recordOf(entry);
-    if (record == null || stringField(record, 'state') !== 'open') {
-      return [];
-    }
-    const number = numberField(record, 'number');
-    return number == null ? [] : [number];
-  });
+    const number = record == null ? null : numberField(record, 'number');
+    const state = record == null ? null : stringField(record, 'state');
+    if (number == null || number <= 0 || (state !== 'open' && state !== 'closed')) return null;
+
+    if (state === 'open') openNumbers.push(number);
+  }
+
+  return openNumbers;
 }
 
 function parseCompare(value: unknown): CompareResult | null {
@@ -157,7 +194,9 @@ function parseCompare(value: unknown): CompareResult | null {
 
   const behindBy = numberField(record, 'behind_by');
   const aheadBy = numberField(record, 'ahead_by');
-  return behindBy == null || aheadBy == null ? null : { behindBy, aheadBy };
+  if (behindBy == null || aheadBy == null || behindBy < 0 || aheadBy < 0) return null;
+
+  return { behindBy, aheadBy };
 }
 
 function parseMergeResponse(value: unknown): { readonly merged: boolean } | null {
@@ -176,6 +215,34 @@ function parseMergeBaseResponse(value: unknown, status: number): MergeBaseResult
   return sha == null ? null : { kind: 'merged', sha };
 }
 
+function headerValue(headers: unknown, name: string): string | null {
+  if (headers instanceof Headers) return headers.get(name);
+
+  const record = recordOf(headers);
+  if (record == null) return null;
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key.toLowerCase() !== name) continue;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return String(value);
+    return null;
+  }
+
+  return null;
+}
+
+function isRateLimited(status: number, message: string, error: Record<string, unknown> | null): boolean {
+  if (status === 429) return true;
+  if (status !== 403) return false;
+
+  const response = error == null ? null : recordOf(error['response']);
+  const headers = response == null ? null : response['headers'];
+  const remaining = headerValue(headers, 'x-ratelimit-remaining');
+  const retryAfter = headerValue(headers, 'retry-after');
+
+  return remaining === '0' || retryAfter != null || message.toLowerCase().includes('rate limit');
+}
+
 function toGitHubError(error: unknown): GitHubError {
   const record = recordOf(error);
   const status =
@@ -190,17 +257,17 @@ function toGitHubError(error: unknown): GitHubError {
   if (status === 404) {
     return { kind: 'not_found', message };
   }
-  if (status === 403 && message.toLowerCase().includes('rate limit')) {
+  if (status != null && isRateLimited(status, message, record)) {
     return { kind: 'rate_limited', message };
   }
-  if (status === 403) {
+  if (status === 401 || status === 403) {
     return { kind: 'forbidden', message };
   }
-  if (status === 405 || status === 409 || status === 422) {
-    return { kind: 'conflict', message };
+  if (status === 400 || status === 422) {
+    return { kind: 'validation', message };
   }
-  if (status === 429) {
-    return { kind: 'rate_limited', message };
+  if (status === 405 || status === 409) {
+    return { kind: 'conflict', message };
   }
   if (status != null && status >= 500) {
     return { kind: 'server', status, message };

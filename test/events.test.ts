@@ -12,6 +12,29 @@ function pullRequestPayload(action = 'labeled'): unknown {
   return { action, repository: payloadRepository, pull_request: { number: 7 } };
 }
 
+function workflowRunPayload(overrides: Record<string, unknown> = {}): unknown {
+  return {
+    action: 'completed',
+    repository: payloadRepository,
+    workflow_run: {
+      conclusion: 'success',
+      event: 'pull_request',
+      head_branch: 'feature',
+      head_sha: 'sha',
+      pull_requests: [],
+      ...overrides,
+    },
+  };
+}
+
+function checkSuitePayload(overrides: Record<string, unknown> = {}): unknown {
+  return {
+    action: 'completed',
+    repository: payloadRepository,
+    check_suite: { conclusion: 'success', head_sha: 'sha', pull_requests: [], ...overrides },
+  };
+}
+
 describe('parseEvent', () => {
   it('parses pull_request events', () => {
     const event = expectOk(parseEvent('pull_request', pullRequestPayload()));
@@ -109,22 +132,61 @@ describe('parseEvent', () => {
     });
   });
 
-  it('defaults non-array pull request lists to empty', () => {
-    const event = expectOk(
-      parseEvent('workflow_run', {
+  it.each([
+    [
+      'workflow_run',
+      'a missing list',
+      {
         action: 'completed',
         repository: payloadRepository,
         workflow_run: {
           conclusion: 'success',
-          event: 'push',
-          head_branch: 'main',
+          event: 'pull_request',
+          head_branch: 'feature',
           head_sha: 'sha',
-          pull_requests: 'not-an-array',
         },
-      }),
-    );
+      },
+    ],
+    ['workflow_run', 'a non-array list', workflowRunPayload({ pull_requests: 'not-an-array' })],
+    ['workflow_run', 'a null element', workflowRunPayload({ pull_requests: [{ number: 7 }, null] })],
+    [
+      'workflow_run',
+      'a malformed element',
+      workflowRunPayload({ pull_requests: [{ number: 7 }, { number: '8' }] }),
+    ],
+    [
+      'check_suite',
+      'a missing list',
+      {
+        action: 'completed',
+        repository: payloadRepository,
+        check_suite: { conclusion: 'success', head_sha: 'sha' },
+      },
+    ],
+    ['check_suite', 'a non-array list', checkSuitePayload({ pull_requests: {} })],
+    ['check_suite', 'a malformed element', checkSuitePayload({ pull_requests: [{}] })],
+  ] as const)('rejects %s payloads with %s', (eventName, _label, payload) => {
+    expect(parseEvent(eventName, payload)).toMatchObject({
+      ok: false,
+      error: { kind: 'malformed', eventName },
+    });
+  });
 
-    expect(event.kind === 'workflow_run' ? event.pullRequests : null).toEqual([]);
+  it('distinguishes a legitimate empty pull request list from a malformed one', () => {
+    const workflowRun = expectOk(parseEvent('workflow_run', workflowRunPayload()));
+    const checkSuite = expectOk(parseEvent('check_suite', checkSuitePayload()));
+
+    expect(workflowRun.kind === 'workflow_run' ? workflowRun.pullRequests : null).toEqual([]);
+    expect(checkSuite.kind === 'check_suite' ? checkSuite.pullRequests : null).toEqual([]);
+  });
+
+  it('rejects pull request numbers that are not positive integers', () => {
+    expect(
+      parseEvent('workflow_run', workflowRunPayload({ pull_requests: [{ number: 0 }] })),
+    ).toMatchObject({ ok: false, error: { kind: 'malformed' } });
+    expect(
+      parseEvent('workflow_run', workflowRunPayload({ pull_requests: [{ number: 1.5 }] })),
+    ).toMatchObject({ ok: false, error: { kind: 'malformed' } });
   });
 });
 

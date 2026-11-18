@@ -130,6 +130,36 @@ describe('runAction', () => {
     expect(failures).toEqual(['Failed to read event payload: missing']);
   });
 
+  it('does not fall back to a commit SHA when the pull request list is malformed', async () => {
+    let commitLookups = 0;
+    const client = createFakeClient({
+      listPullRequestsForCommit: async () => {
+        commitLookups += 1;
+        return ok([]);
+      },
+    });
+    const { platform, outputs, warnings } = createPlatform({
+      eventName: 'workflow_run',
+      readEvent: async () =>
+        ok({
+          action: 'completed',
+          repository: { name: 'repo', owner: { login: 'owner' } },
+          workflow_run: {
+            conclusion: 'success',
+            event: 'pull_request',
+            head_sha: 'sha',
+          },
+        }),
+      createClient: () => client,
+    });
+
+    await runAction(platform);
+
+    expect(warnings).toHaveLength(1);
+    expect(commitLookups).toEqual(0);
+    expect(outputs).toEqual({ 'merge-result': 'skipped', 'pull-request-number': 0 });
+  });
+
   it('writes skipped outputs for malformed and unsupported events', async () => {
     const malformed = createPlatform({ readEvent: async () => ok({ action: 'labeled' }) });
     const unsupported = createPlatform({ eventName: 'push' });

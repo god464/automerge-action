@@ -17,6 +17,7 @@ interface RecordedRequest {
 interface StubResponse {
   readonly status?: number;
   readonly body?: unknown;
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 function parsedBody(body: BodyInit | null | undefined): unknown {
@@ -44,7 +45,7 @@ function createClient(respond: (request: RecordedRequest) => StubResponse) {
 
     return new Response(response.body === undefined ? null : JSON.stringify(response.body), {
       status: response.status ?? 200,
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...response.headers },
     });
   };
   const octokit = github.getOctokit('token', { request: { fetch: fetchStub } });
@@ -61,7 +62,7 @@ function pullRequestPayload(overrides: Record<string, unknown> = {}): Record<str
     draft: false,
     mergeable: true,
     mergeable_state: 'clean',
-    labels: [{ name: 'automerge' }, { name: 'ready' }, { name: 42 }],
+    labels: [{ name: 'automerge' }, { name: 'ready' }],
     head: { ref: 'feature', sha: 'head-sha', repo: { full_name: 'owner/repo' } },
     base: {
       ref: 'main',
@@ -137,22 +138,41 @@ describe('getPullRequest', () => {
     expect((await client.getPullRequest(repo, 7)).ok).toBe(false);
   });
 
-  it('tolerates malformed optional fields', async () => {
-    const { client } = createClient(() => ({
-      body: pullRequestPayload({ labels: 'automerge', mergeable_state: 42 }),
-    }));
+  it.each([
+    ['labels is not an array', { labels: 'automerge' }],
+    ['a label has no name', { labels: [{ name: 'automerge' }, { color: 'red' }] }],
+    ['mergeable_state is not a string', { mergeable_state: 42 }],
+    ['mergeable is not a boolean', { mergeable: 'true' }],
+    ['state is unknown', { state: 'locked' }],
+    ['title is missing', { title: undefined }],
+    ['number is missing', { number: undefined }],
+  ] as const)('rejects the response when %s', async (_label, override) => {
+    const { client } = createClient(() => ({ body: pullRequestPayload(override) }));
 
-    const snapshot = expectOk(await client.getPullRequest(repo, 7));
+    expect(await client.getPullRequest(repo, 7)).toEqual({
+      ok: false,
+      error: { kind: 'invalid_response', message: 'unexpected GitHub API response shape' },
+    });
+  });
 
-    expect(snapshot.labels).toEqual([]);
-    expect(snapshot.mergeableState).toEqual('other');
+  it('accepts a boolean or null mergeable value', async () => {
+    let call = 0;
+    const { client } = createClient(() => {
+      call += 1;
+      return {
+        body: pullRequestPayload({ mergeable: call === 1 ? false : null }),
+      };
+    });
+
+    expect(expectOk(await client.getPullRequest(repo, 7)).mergeable).toBe(false);
+    expect(expectOk(await client.getPullRequest(repo, 7)).mergeable).toBeNull();
   });
 });
 
 describe('listOpenPullRequests', () => {
   it('requests one page with the base filter and parses snapshots', async () => {
     const { client, requests } = createClient(() => ({
-      body: [pullRequestPayload(), pullRequestPayload({ number: 8, state: 'closed' }), null],
+      body: [pullRequestPayload(), pullRequestPayload({ number: 8, state: 'closed' })],
     }));
 
     const snapshots = expectOk(
@@ -169,21 +189,35 @@ describe('listOpenPullRequests', () => {
     expect(snapshots.map((snapshot) => snapshot.number)).toEqual([7, 8]);
   });
 
-  it('rejects a non-array payload', async () => {
-    const { client } = createClient(() => ({ body: { message: 'nope' } }));
+  it('accepts a legitimate empty list', async () => {
+    const { client } = createClient(() => ({ body: [] }));
 
-    expect((await client.listOpenPullRequests(repo, { base: 'main', perPage: 10 })).ok).toBe(false);
+    expect(expectOk(await client.listOpenPullRequests(repo, { base: 'main', perPage: 10 }))).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    ['a non-array payload', { message: 'nope' }],
+    ['a null element', [pullRequestPayload(), null]],
+    ['a malformed element', [pullRequestPayload(), { number: 'seven' }]],
+    ['an unknown state in an element', [pullRequestPayload({ state: 'locked' })]],
+  ] as const)('rejects %s instead of returning a partial list', async (_label, body) => {
+    const { client } = createClient(() => ({ body }));
+
+    expect(await client.listOpenPullRequests(repo, { base: 'main', perPage: 10 })).toEqual({
+      ok: false,
+      error: { kind: 'invalid_response', message: 'unexpected GitHub API response shape' },
+    });
   });
 });
 
 describe('listPullRequestsForCommit', () => {
-  it('returns open pull request numbers and ignores closed or invalid entries', async () => {
+  it('returns open pull request numbers and ignores closed entries', async () => {
     const { client, requests } = createClient(() => ({
       body: [
         { number: 1, state: 'open' },
         { number: 2, state: 'closed' },
-        { number: 'three', state: 'open' },
-        null,
       ],
     }));
 
@@ -191,10 +225,19 @@ describe('listPullRequestsForCommit', () => {
     expect(requests[0]?.url.pathname).toEqual('/repos/owner/repo/commits/abc123/pulls');
   });
 
-  it('rejects a non-array payload', async () => {
-    const { client } = createClient(() => ({ body: {} }));
+  it.each([
+    ['a non-array payload', {}],
+    ['a malformed element', [{ number: 'three', state: 'open' }]],
+    ['a null element', [null]],
+    ['an unknown state', [{ number: 1, state: 'locked' }]],
+    ['a missing number', [{ state: 'open' }]],
+  ] as const)('rejects %s', async (_label, body) => {
+    const { client } = createClient(() => ({ body }));
 
-    expect((await client.listPullRequestsForCommit(repo, 'abc123')).ok).toBe(false);
+    expect(await client.listPullRequestsForCommit(repo, 'abc123')).toEqual({
+      ok: false,
+      error: { kind: 'invalid_response', message: 'unexpected GitHub API response shape' },
+    });
   });
 });
 
@@ -209,12 +252,21 @@ describe('compareCommits', () => {
     expect(requests[0]?.url.pathname).toEqual('/repos/owner/repo/compare/main...feature');
   });
 
-  it('rejects missing counts and non-object payloads', async () => {
-    const missing = createClient(() => ({ body: { behind_by: 3 } }));
-    const scalar = createClient(() => ({ body: null }));
+  it('rejects missing, negative, non-integer, and non-object payloads', async () => {
+    for (const body of [
+      { behind_by: 3 },
+      { behind_by: -1, ahead_by: 1 },
+      { behind_by: 1, ahead_by: 1.5 },
+      { behind_by: '1', ahead_by: 1 },
+      null,
+    ]) {
+      const { client } = createClient(() => ({ body }));
 
-    expect((await missing.client.compareCommits(repo, 'main', 'feature')).ok).toBe(false);
-    expect((await scalar.client.compareCommits(repo, 'main', 'feature')).ok).toBe(false);
+      expect(await client.compareCommits(repo, 'main', 'feature')).toEqual({
+        ok: false,
+        error: { kind: 'invalid_response', message: 'unexpected GitHub API response shape' },
+      });
+    }
   });
 });
 
@@ -322,14 +374,14 @@ describe('mergeBaseIntoHead', () => {
 describe('error classification', () => {
   it.each([
     [404, 'Not Found', 'not_found'],
-    [403, 'API rate limit exceeded', 'rate_limited'],
+    [401, 'Bad credentials', 'forbidden'],
     [403, 'Resource not accessible by integration', 'forbidden'],
     [405, 'Method Not Allowed', 'conflict'],
-    [409, 'Merge conflict', 'conflict'],
-    [422, 'Validation Failed', 'conflict'],
+    [409, 'Head branch was modified', 'conflict'],
+    [422, 'Validation Failed', 'validation'],
+    [400, 'Bad Request', 'validation'],
     [429, 'Too many requests', 'rate_limited'],
     [500, 'Internal Server Error', 'server'],
-    [400, 'Bad Request', 'server'],
   ] as const)('classifies HTTP %i as %s', async (status, message, kind) => {
     const { client } = createClient(() => ({ status, body: { message } }));
 
@@ -337,6 +389,42 @@ describe('error classification', () => {
 
     expect(result.ok).toBe(false);
     expect(result.ok ? null : result.error.kind).toEqual(kind);
+  });
+
+  it('recognizes a rate limit from response headers even without a message hint', async () => {
+    const { client } = createClient(() => ({
+      status: 403,
+      body: { message: 'Forbidden' },
+      headers: { 'x-ratelimit-remaining': '0' },
+    }));
+
+    expect(await client.getPullRequest(repo, 7)).toEqual({
+      ok: false,
+      error: { kind: 'rate_limited', message: 'Forbidden' },
+    });
+  });
+
+  it('recognizes a secondary rate limit from a retry-after header', async () => {
+    const { client } = createClient(() => ({
+      status: 403,
+      body: { message: 'Forbidden' },
+      headers: { 'retry-after': '60' },
+    }));
+
+    expect((await client.getPullRequest(repo, 7)).ok ? null : 'rate_limited').toEqual(
+      'rate_limited',
+    );
+  });
+
+  it('keeps the message fallback for rate limits reported without headers', async () => {
+    const { client } = createClient(() => ({
+      status: 403,
+      body: { message: 'API rate limit exceeded for user' },
+    }));
+
+    expect((await client.getPullRequest(repo, 7)).ok ? null : 'rate_limited').toEqual(
+      'rate_limited',
+    );
   });
 
   it('classifies a thrown error without a status as a network failure', async () => {
