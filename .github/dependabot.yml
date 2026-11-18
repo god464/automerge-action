@@ -3,24 +3,21 @@ updates:
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:
-      interval: 'weekly'
+      interval: daily
     commit-message:
       prefix: 'bump'
     groups:
       npm-dependencies:
         patterns:
           - '*'
-    cooldown:
-      default-days: 7
+
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:
-      interval: 'weekly'
+      interval: daily
     commit-message:
       prefix: 'bump'
     groups:
       gh-dependencies:
         patterns:
           - '*'
-    cooldown:
-      default-days: 7

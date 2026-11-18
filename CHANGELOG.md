@@ -2,13 +2,12 @@
 
 ## [1.0.3](https://github.com/god464/automerge-action/compare/v1.0.2...v1.0.3) (2026-11-18)
 
-
 ### Bug Fixes
 
-* bound the entire rebase flow with one deadline ([3df1460](https://github.com/god464/automerge-action/commit/3df1460585f7fdcb77b13fcdfd2361131005acfe))
-* fail closed when merge state or compare result is unknown ([4087560](https://github.com/god464/automerge-action/commit/40875602e0eae1390a9b6c4e01667ea70fffd1ff))
-* pass git auth via config env and harden test fakes ([e5cf4ed](https://github.com/god464/automerge-action/commit/e5cf4eda168d9f0f0d09dea7faf053570b1c3aaa))
-* reject malformed GitHub API and webhook payloads ([d1fc860](https://github.com/god464/automerge-action/commit/d1fc86058c05a59983fc3a4cf65bdcede957c903))
+- bound the entire rebase flow with one deadline ([3df1460](https://github.com/god464/automerge-action/commit/3df1460585f7fdcb77b13fcdfd2361131005acfe))
+- fail closed when merge state or compare result is unknown ([4087560](https://github.com/god464/automerge-action/commit/40875602e0eae1390a9b6c4e01667ea70fffd1ff))
+- pass git auth via config env and harden test fakes ([e5cf4ed](https://github.com/god464/automerge-action/commit/e5cf4eda168d9f0f0d09dea7faf053570b1c3aaa))
+- reject malformed GitHub API and webhook payloads ([d1fc860](https://github.com/god464/automerge-action/commit/d1fc86058c05a59983fc3a4cf65bdcede957c903))
 
 ## [1.0.2](https://github.com/god464/automerge-action/compare/v1.0.1...v1.0.2) (2026-11-15)
 
