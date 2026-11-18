@@ -159,9 +159,7 @@ describe('getPullRequest', () => {
     let call = 0;
     const { client } = createClient(() => {
       call += 1;
-      return {
-        body: pullRequestPayload({ mergeable: call === 1 ? false : null }),
-      };
+      return { body: pullRequestPayload({ mergeable: call === 1 ? false : null }) };
     });
 
     expect(expectOk(await client.getPullRequest(repo, 7)).mergeable).toBe(false);
@@ -192,9 +190,9 @@ describe('listOpenPullRequests', () => {
   it('accepts a legitimate empty list', async () => {
     const { client } = createClient(() => ({ body: [] }));
 
-    expect(expectOk(await client.listOpenPullRequests(repo, { base: 'main', perPage: 10 }))).toEqual(
-      [],
-    );
+    expect(
+      expectOk(await client.listOpenPullRequests(repo, { base: 'main', perPage: 10 })),
+    ).toEqual([]);
   });
 
   it.each([

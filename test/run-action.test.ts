@@ -42,7 +42,7 @@ function createPlatform(overrides: Partial<ActionPlatform> = {}) {
     createGit: () => createUnusedGitRunner(),
     sleep: async () => undefined,
     now: () => 0,
-    cloneUrl: (token, repoFullName) => `https://${token}@github.com/${repoFullName}.git`,
+    cloneUrl: (repoFullName) => `https://github.com/${repoFullName}.git`,
     ...overrides,
   };
 
@@ -59,6 +59,22 @@ describe('runAction', () => {
     expect(errors).toEqual([]);
     expect(failures).toEqual([]);
     expect(outputs).toEqual({ 'merge-result': 'merged', 'pull-request-number': 1 });
+  });
+
+  it('passes the token to the git runner instead of the clone URL', async () => {
+    const gitTokens: string[] = [];
+    const { platform } = createPlatform({
+      createGit: (_logger, token) => {
+        gitTokens.push(token);
+        return createUnusedGitRunner();
+      },
+    });
+
+    await runAction(platform);
+
+    expect(gitTokens).toEqual(['token']);
+    expect(platform.cloneUrl('owner/repo')).toEqual('https://github.com/owner/repo.git');
+    expect(platform.cloneUrl('owner/repo')).not.toContain('token');
   });
 
   it('reports missing configuration without creating clients', async () => {
@@ -144,11 +160,7 @@ describe('runAction', () => {
         ok({
           action: 'completed',
           repository: { name: 'repo', owner: { login: 'owner' } },
-          workflow_run: {
-            conclusion: 'success',
-            event: 'pull_request',
-            head_sha: 'sha',
-          },
+          workflow_run: { conclusion: 'success', event: 'pull_request', head_sha: 'sha' },
         }),
       createClient: () => client,
     });

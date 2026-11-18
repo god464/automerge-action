@@ -1,30 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PullRequestSnapshot } from '@/domain/pull-request';
 import { err, ok } from '@/result';
 import { resolvePullRequestSnapshot } from '@/run/resolve-state';
 
 import { expectOk, pullRequest } from './factories';
-import { createFakeClient, createFakeLogger, createFakeSleep } from './fakes';
+import { createFakeClient, createFakeLogger, createFakeSleep, createSequenceClient } from './fakes';
 
 const repo = { owner: 'owner', repo: 'repo' };
 
-function sequenceClient(snapshots: readonly PullRequestSnapshot[]) {
-  let index = 0;
-  return createFakeClient({
-    getPullRequest: async (nextRepo, number) => {
-      const snapshot = snapshots[Math.min(index, snapshots.length - 1)];
-      index += 1;
-      return snapshot == null
-        ? err({ kind: 'not_found', message: 'missing' })
-        : ok({ ...snapshot, repo: nextRepo, number });
-    },
-  });
-}
-
 describe('resolvePullRequestSnapshot', () => {
   it('returns the first snapshot when mergeability is known', async () => {
-    const client = sequenceClient([pullRequest()]);
+    const client = createSequenceClient([pullRequest()]);
 
     expect(
       expectOk(
@@ -39,7 +25,7 @@ describe('resolvePullRequestSnapshot', () => {
   });
 
   it('retries unknown mergeability until it becomes known', async () => {
-    const client = sequenceClient([
+    const client = createSequenceClient([
       pullRequest({ mergeableState: 'unknown' }),
       pullRequest({ mergeableState: null }),
       pullRequest({ mergeableState: 'clean' }),
@@ -61,7 +47,7 @@ describe('resolvePullRequestSnapshot', () => {
   });
 
   it('retries when mergeable is null even if the state looks clean', async () => {
-    const client = sequenceClient([
+    const client = createSequenceClient([
       pullRequest({ mergeable: null, mergeableState: 'clean' }),
       pullRequest({ mergeable: true, mergeableState: 'clean' }),
     ]);
@@ -81,7 +67,9 @@ describe('resolvePullRequestSnapshot', () => {
   });
 
   it('gives up after the configured number of attempts', async () => {
-    const client = sequenceClient([pullRequest({ mergeableState: 'unknown' })]);
+    const client = createSequenceClient([pullRequest({ mergeableState: 'unknown' })], {
+      repeatLast: true,
+    });
     const logger = createFakeLogger();
 
     const snapshot = expectOk(

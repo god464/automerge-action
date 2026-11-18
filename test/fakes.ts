@@ -108,6 +108,40 @@ export function createFakeClient(options: FakeClientOptions = {}): FakeClient {
   };
 }
 
+export type SequenceClientOptions = Omit<FakeClientOptions, 'getPullRequest'> & {
+  readonly repeatLast?: boolean;
+};
+
+export function createSequenceClient(
+  snapshots: readonly PullRequestSnapshot[],
+  options: SequenceClientOptions = {},
+): FakeClient {
+  const { repeatLast = false, ...clientOptions } = options;
+  let index = 0;
+
+  return createFakeClient({
+    ...clientOptions,
+    getPullRequest: async (repo, number) => {
+      const position = index;
+      index += 1;
+      const snapshot =
+        position < snapshots.length
+          ? snapshots[position]
+          : repeatLast
+            ? snapshots.at(-1)
+            : undefined;
+
+      if (snapshot == null) {
+        throw new Error(
+          `unexpected getPullRequest call #${index}: only ${snapshots.length} snapshot(s) configured`,
+        );
+      }
+
+      return ok({ ...snapshot, repo, number });
+    },
+  });
+}
+
 export interface FakeLogger extends Logger {
   readonly debugMessages: readonly string[];
   readonly infoMessages: readonly string[];

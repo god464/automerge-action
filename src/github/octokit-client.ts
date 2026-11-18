@@ -127,7 +127,11 @@ function parsePullRequest(value: unknown): PullRequestSnapshot | null {
 
   if (merged !== undefined && typeof merged !== 'boolean') return null;
   if (draft !== undefined && typeof draft !== 'boolean') return null;
-  if (mergeableValue !== undefined && mergeableValue !== null && typeof mergeableValue !== 'boolean')
+  if (
+    mergeableValue !== undefined &&
+    mergeableValue !== null &&
+    typeof mergeableValue !== 'boolean'
+  )
     return null;
   if (
     mergeableStateValue !== undefined &&
@@ -231,7 +235,11 @@ function headerValue(headers: unknown, name: string): string | null {
   return null;
 }
 
-function isRateLimited(status: number, message: string, error: Record<string, unknown> | null): boolean {
+function isRateLimited(
+  status: number,
+  message: string,
+  error: Record<string, unknown> | null,
+): boolean {
   if (status === 429) return true;
   if (status !== 403) return false;
 

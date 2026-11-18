@@ -276,7 +276,12 @@ describe('findEarliestBase failures', () => {
         rebaseHead(),
       ),
     ).toEqual({ ok: false, error: { kind: 'no_common_ancestor' } });
-    expect(calls.map((call) => call.args[0])).toEqual(['clone', 'fetch', 'merge-base', 'rev-parse']);
+    expect(calls.map((call) => call.args[0])).toEqual([
+      'clone',
+      'fetch',
+      'merge-base',
+      'rev-parse',
+    ]);
   });
 
   it('propagates deepening fetch failures', async () => {

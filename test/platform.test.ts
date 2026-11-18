@@ -29,11 +29,9 @@ describe('createPlatform', () => {
       expect(platform.inputs['github-token']).toEqual('value:github-token');
       expect(platform.eventName).toEqual('pull_request');
       expect(platform.eventPath).toEqual('/event.json');
-      expect(platform.cloneUrl('token', 'owner/repo')).toEqual(
-        'https://x-access-token:token@github.com/owner/repo.git',
-      );
+      expect(platform.cloneUrl('owner/repo')).toEqual('https://github.com/owner/repo.git');
       expect(platform.readEvent).toBeTypeOf('function');
-      expect(platform.createGit(platform.logger)).toHaveProperty('run');
+      expect(platform.createGit(platform.logger, 'token')).toHaveProperty('run');
       expect(platform.createClient('token')).toHaveProperty('getPullRequest');
       expect(core.getInput).toHaveBeenCalled();
     } finally {

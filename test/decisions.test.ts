@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { LabelFilter } from '@/domain/labels';
 import { commitTitleFor, decideMerge } from '@/domain/merge-decision';
-import {
-  behindStatus,
-  classifyMergeableState,
-  shouldProbeBehind,
-} from '@/domain/merge-state';
+import { behindStatus, classifyMergeableState, shouldProbeBehind } from '@/domain/merge-state';
 import type { MergeableState } from '@/domain/pull-request';
 import { decideUpdate, updateEligibility } from '@/domain/update-decision';
 
@@ -47,9 +43,9 @@ describe('classifyMergeableState', () => {
     expect(
       classifyMergeableState(pullRequest({ mergeable: null, mergeableState: 'unstable' })),
     ).toEqual({ kind: 'unknown' });
-    expect(
-      classifyMergeableState(pullRequest({ mergeable: null, mergeableState: null })),
-    ).toEqual({ kind: 'unknown' });
+    expect(classifyMergeableState(pullRequest({ mergeable: null, mergeableState: null }))).toEqual({
+      kind: 'unknown',
+    });
     expect(
       classifyMergeableState(pullRequest({ mergeable: null, mergeableState: 'other' })),
     ).toEqual({ kind: 'not_ready', reason: 'other' });

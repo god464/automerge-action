@@ -23,10 +23,10 @@ export interface ActionPlatform {
   readonly warning: (message: string) => void;
   readonly readEvent: (path: string) => Promise<Result<unknown, string>>;
   readonly createClient: (token: string) => GitHubClient;
-  readonly createGit: (logger: Logger) => GitRunner;
+  readonly createGit: (logger: Logger, token: string) => GitRunner;
   readonly sleep: (ms: number) => Promise<void>;
   readonly now: () => number;
-  readonly cloneUrl: (token: string, repoFullName: string) => string;
+  readonly cloneUrl: (repoFullName: string) => string;
 }
 
 function formatConfigError(error: ConfigError): string {
@@ -66,10 +66,10 @@ function runtimeFor(platform: ActionPlatform, config: Config) {
     config,
     client: platform.createClient(config.githubToken),
     logger: platform.logger,
-    git: platform.createGit(platform.logger),
+    git: platform.createGit(platform.logger, config.githubToken),
     sleep: platform.sleep,
     now: platform.now,
-    cloneUrl: (repoFullName: string) => platform.cloneUrl(config.githubToken, repoFullName),
+    cloneUrl: platform.cloneUrl,
   };
 }
 

@@ -148,7 +148,11 @@ describe('parseEvent', () => {
       },
     ],
     ['workflow_run', 'a non-array list', workflowRunPayload({ pull_requests: 'not-an-array' })],
-    ['workflow_run', 'a null element', workflowRunPayload({ pull_requests: [{ number: 7 }, null] })],
+    [
+      'workflow_run',
+      'a null element',
+      workflowRunPayload({ pull_requests: [{ number: 7 }, null] }),
+    ],
     [
       'workflow_run',
       'a malformed element',

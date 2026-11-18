@@ -104,8 +104,14 @@ With `update-method: merge` the action merges the base branch into the pull
 request head through the API. With `rebase` it clones the head repository,
 fetches the base, rebases, and force-pushes with `--force-with-lease`.
 
+Compare requests are fail-closed: if GitHub's compare API fails, returns an
+invalid response, or the result cannot be interpreted, the pull request is not
+updated and the merge is refused for that run.
+
 After an update the pull request is refreshed. If it is not ready then, the
-result is `not_ready`; the next check completion can merge it.
+result is `not_ready`; the next check completion can merge it. A refresh that
+returns `behind`, remains `unknown`, or fails also produces `not_ready`. Only a
+refreshed snapshot that GitHub reports as mergeable may continue to merge.
 
 ### Merging
 
@@ -121,7 +127,16 @@ result is `not_ready`; the next check completion can merge it.
 | `unknown` or missing | Retry up to 3 times, 2 seconds apart, then `not_ready`.                     |
 | any other value      | `not_ready` with a warning.                                                 |
 
-`mergeable === false` and `draft === true` take precedence over the state.
+`mergeable === false` and `draft === true` take precedence over the state. A
+merge also requires `mergeable === true`: when GitHub returns `mergeable: null`,
+ready-looking states such as `clean` and `unstable` are treated as unknown and
+retried; states that are already definitively not ready stay not ready.
+
+`unstable` is probed with the compare API before merging. A failed compare is
+not treated as up to date and produces `not_ready`; when the comparison shows
+the branch is behind, the action updates it first and then uses the refreshed
+state.
+
 `merge_failed` is emitted only when the merge API call fails. A merge race is
 handled by re-reading the pull request; if another actor merged it, the result
 is `merged`.
@@ -141,6 +156,10 @@ each. The bound is an internal constant.
 | `check_suite`         | `completed` + `conclusion = success`                                                                  | Associated pull requests, or commit SHA; update and merge.      |
 | `status`              | `state = success`                                                                                     | Pull requests associated with the commit SHA; update and merge. |
 | anything else         | –                                                                                                     | Output `skipped` and emit a warning.                            |
+
+`workflow_run` and `check_suite` payloads must contain a valid `pull_requests`
+array. A missing, non-array, or partially malformed list is reported as a
+malformed payload and never falls back to the commit SHA.
 
 GitHub does not deliver `check_suite` events for check suites created by GitHub
 Actions. Use `workflow_run` for a Build Check implemented as an Actions
@@ -163,9 +182,14 @@ Use `${{ secrets.GITHUB_TOKEN }}` unless one of these applies:
 - A `pull_request` event from a fork has a read-only token. Prefer
   `workflow_run` or a PAT/App token.
 
+The token is passed to git through a per-process HTTP authorization header. It
+is not embedded in clone URLs or command arguments.
+
 ## Limits
 
 - Up to 10 pull requests per list/fan-out operation.
+- A rebase run (clone, fetch/deepen, rebase, push) shares one 5-minute deadline;
+  each git command receives only the remaining budget.
 - Branches are not deleted and labels are not removed after merge.
 - Approval counts are not read; required reviews are enforced by branch
   protection.

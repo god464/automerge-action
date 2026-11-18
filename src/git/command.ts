@@ -39,6 +39,26 @@ const GIT_IDENTITY_ARGS = [
   'user.email=noreply@github.com',
 ] as const;
 
+const GITHUB_AUTH_CONFIG_KEY = 'http.https://github.com/.extraheader';
+
+export interface GitRunnerOptions {
+  readonly token?: string;
+}
+
+function authEnv(token: string | undefined): Readonly<Record<string, string>> {
+  if (token == null || token.length === 0) return {};
+
+  const parsedCount = Number.parseInt(process.env.GIT_CONFIG_COUNT ?? '0', 10);
+  const count = Number.isInteger(parsedCount) && parsedCount > 0 ? parsedCount : 0;
+  const header = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+
+  return {
+    GIT_CONFIG_COUNT: String(count + 1),
+    [`GIT_CONFIG_KEY_${count}`]: GITHUB_AUTH_CONFIG_KEY,
+    [`GIT_CONFIG_VALUE_${count}`]: header,
+  };
+}
+
 interface ProcessResult {
   readonly exitCode: number;
   readonly stdout: string;
@@ -64,6 +84,7 @@ async function execute(
   args: readonly string[],
   cwd: string,
   timeoutMs: number | undefined,
+  env: Readonly<Record<string, string>>,
 ): Promise<ProcessResult> {
   const { promise, resolve, reject } = Promise.withResolvers<ProcessResult>();
   let settled = false;
@@ -73,6 +94,7 @@ async function execute(
 
   const child = spawn('git', [...GIT_IDENTITY_ARGS, ...args], {
     cwd,
+    env: { ...process.env, ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
   });
@@ -112,18 +134,20 @@ async function execute(
   return promise;
 }
 
-export function createGitRunner(logger: Logger): GitRunner {
+export function createGitRunner(logger: Logger, options: GitRunnerOptions = {}): GitRunner {
+  const env = authEnv(options.token);
+
   return {
-    run: async (cwd, args, options = {}) => {
-      const command = options.redactedCommand ?? `git ${args.join(' ')}`;
-      const allowedExitCodes = options.allowedExitCodes ?? [0];
+    run: async (cwd, args, runOptions = {}) => {
+      const command = runOptions.redactedCommand ?? `git ${args.join(' ')}`;
+      const allowedExitCodes = runOptions.allowedExitCodes ?? [0];
       logger.debug(`Executing ${command}`);
 
       try {
-        const output = await execute(args, cwd, options.timeoutMs);
+        const output = await execute(args, cwd, runOptions.timeoutMs, env);
 
         if (output.timedOut)
-          return err({ kind: 'timed_out', command, timeoutMs: options.timeoutMs ?? 0 });
+          return err({ kind: 'timed_out', command, timeoutMs: runOptions.timeoutMs ?? 0 });
 
         if (!allowedExitCodes.includes(output.exitCode))
           return err({

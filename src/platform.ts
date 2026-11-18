@@ -24,10 +24,9 @@ export function createPlatform(): ActionPlatform {
     warning: core.warning,
     readEvent,
     createClient: (token) => createGitHubClient(github.getOctokit(token)),
-    createGit: createGitRunner,
+    createGit: (logger, token) => createGitRunner(logger, { token }),
     sleep,
     now: Date.now,
-    cloneUrl: (token, repoFullName) =>
-      `https://x-access-token:${token}@github.com/${repoFullName}.git`,
+    cloneUrl: (repoFullName) => `https://github.com/${repoFullName}.git`,
   };
 }

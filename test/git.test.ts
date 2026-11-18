@@ -314,6 +314,35 @@ describe('rebaseOntoBase', () => {
   }, 20_000);
 });
 
+describe('createGitRunner authentication', () => {
+  const token = 'super-secret-token';
+  const expectedHeader = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+
+  it('injects the auth header through git config environment, not arguments', async () => {
+    const authLogger = createFakeLogger();
+    const authedGit = createGitRunner(authLogger, { token });
+
+    const result = expectOk(
+      await authedGit.run('.', ['config', '--get', 'http.https://github.com/.extraheader']),
+    );
+
+    expect(result.stdout).toEqual(expectedHeader);
+    expect(authLogger.debugMessages.join('\n')).not.toContain(token);
+    expect(authedGit.run.toString()).not.toContain(token);
+  });
+
+  it('does not expose the token in failure output or logs', async () => {
+    const authLogger = createFakeLogger();
+    const authedGit = createGitRunner(authLogger, { token });
+
+    const result = await authedGit.run('.', ['rev-parse', '--verify', 'refs/heads/does-not-exist']);
+
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(token);
+    expect(authLogger.debugMessages.join('\n')).not.toContain(token);
+  });
+});
+
 describe('createGitRunner', () => {
   it('returns trimmed stdout and the exit code', async () => {
     const result = expectOk(await git.run('.', ['rev-parse', '--is-inside-work-tree']));
