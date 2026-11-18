@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { LabelFilter } from '@/domain/labels';
 import { commitTitleFor, decideMerge } from '@/domain/merge-decision';
-import { classifyMergeableState, isBehind, shouldProbeBehind } from '@/domain/merge-state';
+import {
+  behindStatus,
+  classifyMergeableState,
+  shouldProbeBehind,
+} from '@/domain/merge-state';
 import type { MergeableState } from '@/domain/pull-request';
 import { decideUpdate, updateEligibility } from '@/domain/update-decision';
 
@@ -36,6 +40,24 @@ describe('classifyMergeableState', () => {
     });
   });
 
+  it('does not treat mergeable=null as ready', () => {
+    expect(
+      classifyMergeableState(pullRequest({ mergeable: null, mergeableState: 'clean' })),
+    ).toEqual({ kind: 'unknown' });
+    expect(
+      classifyMergeableState(pullRequest({ mergeable: null, mergeableState: 'unstable' })),
+    ).toEqual({ kind: 'unknown' });
+    expect(
+      classifyMergeableState(pullRequest({ mergeable: null, mergeableState: null })),
+    ).toEqual({ kind: 'unknown' });
+    expect(
+      classifyMergeableState(pullRequest({ mergeable: null, mergeableState: 'other' })),
+    ).toEqual({ kind: 'not_ready', reason: 'other' });
+    expect(
+      classifyMergeableState(pullRequest({ mergeable: null, mergeableState: 'dirty' })),
+    ).toEqual({ kind: 'not_ready', reason: 'dirty' });
+  });
+
   it('lets mergeable=false and draft=true win over the state', () => {
     expect(
       classifyMergeableState(pullRequest({ mergeableState: 'clean', mergeable: false })),
@@ -48,11 +70,17 @@ describe('classifyMergeableState', () => {
 });
 
 describe('behind detection', () => {
-  it('does not depend on whether checks are running or finished', () => {
-    expect(isBehind(2, 'blocked')).toBe(true);
-    expect(isBehind(2, 'clean')).toBe(true);
-    expect(isBehind(0, 'blocked')).toBe(false);
-    expect(isBehind(null, 'behind')).toBe(true);
+  it('derives an explicit behind status from compare counts', () => {
+    expect(behindStatus(2, 'blocked')).toEqual('behind');
+    expect(behindStatus(2, 'clean')).toEqual('behind');
+    expect(behindStatus(0, 'blocked')).toEqual('up_to_date');
+    expect(behindStatus(null, 'behind')).toEqual('behind');
+  });
+
+  it('reports unknown when the compare count is missing and the state is inconclusive', () => {
+    expect(behindStatus(null, 'clean')).toEqual('unknown');
+    expect(behindStatus(null, 'unstable')).toEqual('unknown');
+    expect(behindStatus(null, null)).toEqual('unknown');
   });
 
   it('only probes blocked/unstable pull requests', () => {

@@ -7,6 +7,8 @@ export type MergeableClassification =
   | { readonly kind: 'not_ready'; readonly reason: NotReadyReason }
   | { readonly kind: 'unknown' };
 
+export type BehindStatus = 'behind' | 'up_to_date' | 'unknown';
+
 type NotReadyState = Exclude<MergeableState, 'unknown' | 'clean' | 'has_hooks' | 'unstable'>;
 
 const NOT_READY_REASONS: Readonly<Record<NotReadyState, NotReadyReason>> = {
@@ -30,7 +32,12 @@ export function classifyMergeableState(snapshot: PullRequestSnapshot): Mergeable
 
   if (snapshot.draft) return { kind: 'not_ready', reason: 'draft' };
 
-  return classifyKnownState(snapshot.mergeableState);
+  const classification = classifyKnownState(snapshot.mergeableState);
+  if (classification.kind === 'not_ready' || snapshot.mergeable === true) return classification;
+
+  // mergeable can be null while GitHub computes mergeability. A clean-looking
+  // mergeable_state is not enough: mergeability itself is still unknown.
+  return { kind: 'unknown' };
 }
 
 export function shouldProbeBehind(snapshot: PullRequestSnapshot): boolean {
@@ -41,6 +48,7 @@ export function shouldProbeBehind(snapshot: PullRequestSnapshot): boolean {
   );
 }
 
-export function isBehind(behindBy: number | null, state: MergeableState | null): boolean {
-  return behindBy != null ? behindBy > 0 : state === 'behind';
+export function behindStatus(behindBy: number | null, state: MergeableState | null): BehindStatus {
+  if (behindBy != null) return behindBy > 0 ? 'behind' : 'up_to_date';
+  return state === 'behind' ? 'behind' : 'unknown';
 }

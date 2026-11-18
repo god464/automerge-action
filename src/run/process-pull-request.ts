@@ -1,7 +1,7 @@
 import type { Logger } from '@/actions/logger';
 import type { Config } from '@/config/config';
 import { decideMerge } from '@/domain/merge-decision';
-import { isBehind, shouldProbeBehind } from '@/domain/merge-state';
+import { behindStatus, shouldProbeBehind, type BehindStatus } from '@/domain/merge-state';
 import type { MergeMethod } from '@/domain/methods';
 import type { PullRequestSnapshot, RepoRef } from '@/domain/pull-request';
 import { decideUpdate, updateEligibility } from '@/domain/update-decision';
@@ -64,12 +64,12 @@ async function applyUpdate(deps: ProcessDeps, pullRequest: PullRequestSnapshot):
 async function resolveBehind(
   deps: ProcessDeps,
   pullRequest: PullRequestSnapshot,
-): Promise<boolean> {
+): Promise<BehindStatus> {
   if (pullRequest.mergeableState === 'behind') {
-    return true;
+    return 'behind';
   }
   if (!shouldProbeBehind(pullRequest)) {
-    return false;
+    return 'up_to_date';
   }
 
   const compare = await deps.client.compareCommits(
@@ -81,36 +81,48 @@ async function resolveBehind(
     deps.logger.warning(
       `Failed to compare PR #${pullRequest.number} with its base: ${compare.error.kind}`,
     );
-    return false;
+    return 'unknown';
   }
 
-  return isBehind(compare.value.behindBy, pullRequest.mergeableState);
+  return behindStatus(compare.value.behindBy, pullRequest.mergeableState);
 }
 
-async function maybeUpdate(deps: ProcessDeps, pullRequest: PullRequestSnapshot): Promise<boolean> {
+type UpdateOutcome = 'skipped' | 'attempted' | 'unknown';
+
+async function maybeUpdate(
+  deps: ProcessDeps,
+  pullRequest: PullRequestSnapshot,
+): Promise<UpdateOutcome> {
   const ineligibleReason = updateEligibility(pullRequest, deps.config.updateLabels);
   if (ineligibleReason != null) {
     deps.logger.info(`Skipping update for PR #${pullRequest.number}: ${ineligibleReason}`);
-    return false;
+    return 'skipped';
   }
 
   const behind = await resolveBehind(deps, pullRequest);
+  if (behind === 'unknown') {
+    deps.logger.warning(
+      `Cannot determine whether PR #${pullRequest.number} is behind its base; skipping update`,
+    );
+    return 'unknown';
+  }
+
   const decision = decideUpdate({
     pullRequest,
     filter: deps.config.updateLabels,
-    behind,
+    behind: behind === 'behind',
     method: deps.config.updateMethod,
   });
   if (decision.kind === 'skip') {
     deps.logger.info(`Skipping update for PR #${pullRequest.number}: ${decision.reason}`);
-    return false;
+    return 'skipped';
   }
 
   deps.logger.info(
     `Updating PR #${pullRequest.number} (${pullRequest.head.ref} -> ${pullRequest.base.ref}) via ${decision.method}`,
   );
   await applyUpdate(deps, pullRequest);
-  return true;
+  return 'attempted';
 }
 
 async function applyMerge(
@@ -152,10 +164,18 @@ async function updateThenMerge(
   deps: ProcessDeps,
   pullRequest: PullRequestSnapshot,
 ): Promise<RunResult> {
-  const attempted = await maybeUpdate(deps, pullRequest);
-  const current = attempted
-    ? await resolvePullRequestSnapshot(deps, pullRequest.repo, pullRequest.number)
-    : ok(pullRequest);
+  const outcome = await maybeUpdate(deps, pullRequest);
+  if (outcome === 'unknown') {
+    deps.logger.warning(
+      `Refusing to merge PR #${pullRequest.number} because its state relative to the base is unknown`,
+    );
+    return { result: 'not_ready', pullRequestNumber: pullRequest.number };
+  }
+
+  const current =
+    outcome === 'attempted'
+      ? await resolvePullRequestSnapshot(deps, pullRequest.repo, pullRequest.number)
+      : ok(pullRequest);
   if (!current.ok) {
     deps.logger.warning(
       `Failed to refresh PR #${pullRequest.number} after update: ${current.error.kind}`,

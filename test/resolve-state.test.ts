@@ -60,6 +60,26 @@ describe('resolvePullRequestSnapshot', () => {
     ]);
   });
 
+  it('retries when mergeable is null even if the state looks clean', async () => {
+    const client = sequenceClient([
+      pullRequest({ mergeable: null, mergeableState: 'clean' }),
+      pullRequest({ mergeable: true, mergeableState: 'clean' }),
+    ]);
+    const sleep = createFakeSleep();
+
+    const snapshot = expectOk(
+      await resolvePullRequestSnapshot(
+        { client, logger: createFakeLogger(), sleep: sleep.sleep },
+        repo,
+        4,
+      ),
+    );
+
+    expect(snapshot.mergeable).toBe(true);
+    expect(client.calls.getPullRequest).toHaveLength(2);
+    expect(sleep.calls).toEqual([2000]);
+  });
+
   it('gives up after the configured number of attempts', async () => {
     const client = sequenceClient([pullRequest({ mergeableState: 'unknown' })]);
     const logger = createFakeLogger();

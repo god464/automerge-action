@@ -238,6 +238,79 @@ describe('processPullRequest', () => {
     expect(client.calls.mergePullRequest).toHaveLength(1);
   });
 
+  it('updates an unstable pull request that is behind and then merges it', async () => {
+    const client = sequenceClient([
+      pullRequest({ mergeableState: 'unstable' }),
+      pullRequest({ mergeableState: 'clean' }),
+    ], {
+      compareCommits: async () => ok({ behindBy: 2, aheadBy: 1 }),
+      mergeBaseIntoHead: async () => ok({ kind: 'merged', sha: 'new-head' }),
+    });
+
+    const result = await processPullRequest(deps({ client }), repo, 1, 'update_and_merge');
+
+    expect(result).toEqual({ result: 'merged', pullRequestNumber: 1 });
+    expect(client.calls.compareCommits).toHaveLength(1);
+    expect(client.calls.mergeBaseIntoHead).toHaveLength(1);
+    expect(client.calls.mergePullRequest).toHaveLength(1);
+  });
+
+  it('merges an unstable pull request that is up to date', async () => {
+    const client = createFakeClient({
+      getPullRequest: async (nextRepo, number) =>
+        ok(pullRequest({ repo: nextRepo, number, mergeableState: 'unstable' })),
+      compareCommits: async () => ok({ behindBy: 0, aheadBy: 1 }),
+    });
+
+    const result = await processPullRequest(deps({ client }), repo, 1, 'update_and_merge');
+
+    expect(result).toEqual({ result: 'merged', pullRequestNumber: 1 });
+    expect(client.calls.compareCommits).toHaveLength(1);
+    expect(client.calls.mergeBaseIntoHead).toHaveLength(0);
+    expect(client.calls.mergePullRequest).toHaveLength(1);
+  });
+
+  it.each([
+    ['fails', err({ kind: 'server' as const, status: 500, message: 'boom' })],
+    ['returns an invalid response', err({ kind: 'invalid_response' as const, message: 'bad' })],
+  ] as const)('never merges an unstable pull request when the comparison %s', async (_label, compare) => {
+    const client = createFakeClient({
+      getPullRequest: async (nextRepo, number) =>
+        ok(pullRequest({ repo: nextRepo, number, mergeableState: 'unstable' })),
+      compareCommits: async () => compare,
+    });
+
+    const result = await processPullRequest(deps({ client }), repo, 1, 'update_and_merge');
+
+    expect(result).toEqual({ result: 'not_ready', pullRequestNumber: 1 });
+    expect(client.calls.compareCommits).toHaveLength(1);
+    expect(client.calls.mergeBaseIntoHead).toHaveLength(0);
+    expect(client.calls.mergePullRequest).toHaveLength(0);
+  });
+
+  it.each(['clean', 'unstable'] as const)(
+    'does not merge when mergeable is null with a %s state',
+    async (mergeableState) => {
+      const client = createFakeClient({
+        getPullRequest: async (nextRepo, number) =>
+          ok(pullRequest({ repo: nextRepo, number, mergeable: null, mergeableState })),
+      });
+      const sleep = createFakeSleep();
+
+      const result = await processPullRequest(
+        deps({ client, sleep: sleep.sleep }),
+        repo,
+        1,
+        'update_and_merge',
+      );
+
+      expect(result).toEqual({ result: 'not_ready', pullRequestNumber: 1 });
+      expect(client.calls.getPullRequest).toHaveLength(3);
+      expect(sleep.calls).toEqual([2000, 2000]);
+      expect(client.calls.mergePullRequest).toHaveLength(0);
+    },
+  );
+
   it('does not update a blocked pull request when the comparison fails', async () => {
     const client = createFakeClient({
       getPullRequest: async (nextRepo, number) =>
