@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { GitError, GitOutput, GitRunner } from '@/git/command';
-import { rebaseOntoBase } from '@/git/rebase';
+import { REBASE_TIMEOUT_MS, rebaseOntoBase } from '@/git/rebase';
 import { err, ok, type Result } from '@/result';
 
 import { pullRequest } from './factories';
@@ -16,6 +16,7 @@ const conflict: Reply = err({
   exitCode: 1,
   stderr: 'failed',
 });
+const timedOut: Reply = err({ kind: 'timed_out', command: 'git', timeoutMs: 1 });
 
 interface Script {
   readonly clone?: Reply;
@@ -27,6 +28,7 @@ interface Script {
   readonly newHead?: Reply;
   readonly push?: Reply;
   readonly revList?: Reply;
+  readonly shallow?: Reply;
 }
 
 function scriptedGit(script: Script) {
@@ -42,6 +44,7 @@ function scriptedGit(script: Script) {
           : (script.fetch ?? success());
       if (args[0] === 'merge-base') return script.mergeBase?.(args) ?? success('base-sha');
       if (args[0] === 'rev-list') return script.revList ?? success();
+      if (args[0] === 'rev-parse') return script.shallow ?? success('true');
       if (args[0] === 'show-ref') {
         if (!args.includes('/HEAD')) return script.onto ?? success('onto-sha');
         headLookups += 1;
@@ -120,6 +123,88 @@ describe('rebaseOntoBase failures', () => {
     );
   });
 
+  it.each([
+    ['clone', { clone: timedOut }],
+    ['initial fetch', { fetch: timedOut }],
+    ['merge base lookup', { mergeBase: () => timedOut }],
+    ['rebase', { rebase: timedOut }],
+    ['push', { push: timedOut, newHead: success('new-sha') }],
+  ] as const)('maps a timed-out %s subprocess to a timeout error', async (_label, script) => {
+    expect(await rebaseOntoBase(deps(scriptedGit(script).git), rebaseHead())).toEqual({
+      ok: false,
+      error: { kind: 'timeout' },
+    });
+  });
+
+  it('uses one shrinking budget for every git command', async () => {
+    const calls: { args: readonly string[]; timeoutMs: number | undefined }[] = [];
+    let clock = 0;
+    let heads = 0;
+    const git: GitRunner = {
+      run: async (_cwd, args, options) => {
+        calls.push({ args, timeoutMs: options?.timeoutMs });
+        clock += 1000;
+        if (args[0] === 'merge-base') return success('base-sha');
+        if (args[0] === 'show-ref') {
+          if (!args.includes('/HEAD')) return success('onto-sha');
+          heads += 1;
+          return success(heads === 1 ? 'head-sha' : 'new-sha');
+        }
+        return success();
+      },
+    };
+
+    expect(
+      await rebaseOntoBase(
+        { git, logger: createFakeLogger(), now: () => clock, cloneUrl: () => 'clone-url' },
+        rebaseHead(),
+      ),
+    ).toEqual(ok('new-sha'));
+
+    expect(calls.map((call) => call.args[0])).toEqual([
+      'clone',
+      'fetch',
+      'merge-base',
+      'rev-list',
+      'show-ref',
+      'show-ref',
+      'rebase',
+      'show-ref',
+      'push',
+    ]);
+    expect(calls.map((call) => call.timeoutMs)).toEqual([
+      REBASE_TIMEOUT_MS,
+      REBASE_TIMEOUT_MS - 1000,
+      REBASE_TIMEOUT_MS - 2000,
+      REBASE_TIMEOUT_MS - 3000,
+      REBASE_TIMEOUT_MS - 4000,
+      REBASE_TIMEOUT_MS - 5000,
+      REBASE_TIMEOUT_MS - 6000,
+      REBASE_TIMEOUT_MS - 7000,
+      REBASE_TIMEOUT_MS - 8000,
+    ]);
+  });
+
+  it('does not start a new git command once the deadline is exhausted', async () => {
+    const calls: string[] = [];
+    let clock = 0;
+    const git: GitRunner = {
+      run: async (_cwd, args) => {
+        calls.push(args[0] ?? '');
+        clock = REBASE_TIMEOUT_MS + 1;
+        return success();
+      },
+    };
+
+    expect(
+      await rebaseOntoBase(
+        { git, logger: createFakeLogger(), now: () => clock, cloneUrl: () => 'clone-url' },
+        rebaseHead(),
+      ),
+    ).toEqual({ ok: false, error: { kind: 'timeout' } });
+    expect(calls).toEqual(['clone']);
+  });
+
   it('pushes the rebased head and returns the new SHA', async () => {
     const { git, calls } = scriptedGit({ head: success('head-sha'), newHead: success('new-sha') });
 
@@ -157,7 +242,7 @@ describe('findEarliestBase failures', () => {
         args[1] === 'HEAD' ? success('base-sha') : ok({ stdout: '', exitCode: 1 }),
       revList: success('commit parent-a parent-b'),
       fetch: (args) => {
-        if (args.includes('--deepen')) clock.value = 70_000;
+        if (args.includes('--deepen')) clock.value = REBASE_TIMEOUT_MS + 1;
         return success();
       },
     });
@@ -168,6 +253,30 @@ describe('findEarliestBase failures', () => {
         rebaseHead(),
       ),
     ).toEqual({ ok: false, error: { kind: 'timeout' } });
+  });
+
+  it('reports no common ancestor once the repository is complete', async () => {
+    const { git, calls } = scriptedGit({
+      mergeBase: () => ok({ stdout: '', exitCode: 1 }),
+      shallow: success('false'),
+    });
+    let clock = 0;
+
+    expect(
+      await rebaseOntoBase(
+        {
+          git,
+          logger: createFakeLogger(),
+          now: () => {
+            clock += 1000;
+            return clock;
+          },
+          cloneUrl: () => 'clone-url',
+        },
+        rebaseHead(),
+      ),
+    ).toEqual({ ok: false, error: { kind: 'no_common_ancestor' } });
+    expect(calls.map((call) => call.args[0])).toEqual(['clone', 'fetch', 'merge-base', 'rev-parse']);
   });
 
   it('propagates deepening fetch failures', async () => {
@@ -183,7 +292,7 @@ describe('findEarliestBase failures', () => {
     const clock = { value: 0 };
     const { git } = scriptedGit({
       mergeBase: () => {
-        clock.value = 70_000;
+        clock.value = REBASE_TIMEOUT_MS + 1;
         return ok({ stdout: '', exitCode: 1 });
       },
     });

@@ -6,13 +6,14 @@ import type { GitError, GitOutput, GitRunOptions, GitRunner } from './command';
 import { type TempDirError, withTempDir } from './tmpdir';
 
 export const FETCH_DEPTH = '10';
-export const FETCH_TIMEOUT_MS = 60_000;
+export const REBASE_TIMEOUT_MS = 5 * 60_000;
 
 export type RebaseError =
   | GitError
   | TempDirError
   | { readonly kind: 'head_repo_missing' }
   | { readonly kind: 'head_changed'; readonly expected: string; readonly actual: string }
+  | { readonly kind: 'no_common_ancestor' }
   | { readonly kind: 'timeout' };
 
 export interface RebaseDeps {
@@ -128,25 +129,52 @@ async function findEarliestBase(
   return mergeBase(deps, dir, uniqueBases, deadline);
 }
 
+async function isShallow(
+  deps: RebaseDeps,
+  dir: string,
+  deadline: number,
+): Promise<Result<boolean, RebaseError>> {
+  const result = await runGit(deps, dir, ['rev-parse', '--is-shallow-repository'], deadline);
+  if (!result.ok) return result;
+
+  return ok(result.value.stdout !== 'false');
+}
+
 export async function fetchUntilMergeBase(
   deps: RebaseDeps,
   dir: string,
-  branch: string,
-  timeoutMs: number,
+  baseBranch: string,
+  headBranch: string,
+  deadline: number,
 ): Promise<Result<string, RebaseError>> {
-  const deadline = deps.now() + timeoutMs;
-  const ref = `refs/remotes/origin/${branch}`;
+  const baseRef = `refs/remotes/origin/${baseBranch}`;
+  const headRef = `refs/remotes/origin/${headBranch}`;
 
   while (deps.now() < deadline) {
-    const common = await findEarliestBase(deps, dir, ref, deadline);
+    const common = await findEarliestBase(deps, dir, baseRef, deadline);
     if (!common.ok) return common;
 
     if (common.value != null) return ok(common.value);
 
+    const shallow = await isShallow(deps, dir, deadline);
+    if (!shallow.ok) return shallow;
+    if (!shallow.value) return err({ kind: 'no_common_ancestor' });
+
+    // The clone's shallow boundary can cut the head branch's ancestry just as
+    // the base fetch can cut the base's, so both sides must be deepened.
     const deepen = await runGit(
       deps,
       dir,
-      ['fetch', '--quiet', '--no-tags', '--deepen', FETCH_DEPTH, 'origin', `${branch}:${ref}`],
+      [
+        'fetch',
+        '--quiet',
+        '--no-tags',
+        '--deepen',
+        FETCH_DEPTH,
+        'origin',
+        `${baseBranch}:${baseRef}`,
+        `+refs/heads/${headBranch}:${headRef}`,
+      ],
       deadline,
     );
     if (!deepen.ok) return deepen;
@@ -162,8 +190,11 @@ export async function rebaseOntoBase(
   const repoFullName = pullRequest.head.repoFullName;
   if (repoFullName == null) return err({ kind: 'head_repo_missing' });
 
+  const deadline = deps.now() + REBASE_TIMEOUT_MS;
+
   return withTempDir(async (dir) => {
-    const clone = await deps.git.run(
+    const clone = await runGit(
+      deps,
       '.',
       [
         'clone',
@@ -176,25 +207,37 @@ export async function rebaseOntoBase(
         deps.cloneUrl(repoFullName),
         dir,
       ],
+      deadline,
       { redactedCommand: 'git clone' },
     );
     if (!clone.ok) return clone;
 
-    const fetch = await deps.git.run(dir, [
-      'fetch',
-      '--quiet',
-      '--no-tags',
-      '--depth',
-      FETCH_DEPTH,
-      'origin',
-      `${pullRequest.base.ref}:refs/remotes/origin/${pullRequest.base.ref}`,
-    ]);
+    const fetch = await runGit(
+      deps,
+      dir,
+      [
+        'fetch',
+        '--quiet',
+        '--no-tags',
+        '--depth',
+        FETCH_DEPTH,
+        'origin',
+        `${pullRequest.base.ref}:refs/remotes/origin/${pullRequest.base.ref}`,
+      ],
+      deadline,
+    );
     if (!fetch.ok) return fetch;
 
-    const base = await fetchUntilMergeBase(deps, dir, pullRequest.base.ref, FETCH_TIMEOUT_MS);
+    const base = await fetchUntilMergeBase(
+      deps,
+      dir,
+      pullRequest.base.ref,
+      pullRequest.head.ref,
+      deadline,
+    );
     if (!base.ok) return base;
 
-    const head = await deps.git.run(dir, ['show-ref', '--head', '-s', '/HEAD']);
+    const head = await runGit(deps, dir, ['show-ref', '--head', '-s', '/HEAD'], deadline);
     if (!head.ok) return head;
 
     if (head.value.stdout !== pullRequest.head.sha)
@@ -204,23 +247,24 @@ export async function rebaseOntoBase(
         actual: head.value.stdout,
       });
 
-    const onto = await deps.git.run(dir, [
-      'show-ref',
-      '-s',
-      `refs/remotes/origin/${pullRequest.base.ref}`,
-    ]);
+    const onto = await runGit(
+      deps,
+      dir,
+      ['show-ref', '-s', `refs/remotes/origin/${pullRequest.base.ref}`],
+      deadline,
+    );
     if (!onto.ok) return onto;
 
     deps.logger.info(`Rebasing ${pullRequest.head.ref} onto ${pullRequest.base.ref}`);
-    const rebase = await deps.git.run(dir, [
-      'rebase',
-      '--quiet',
-      '--autosquash',
-      onto.value.stdout,
-    ]);
+    const rebase = await runGit(
+      deps,
+      dir,
+      ['rebase', '--quiet', '--autosquash', onto.value.stdout],
+      deadline,
+    );
     if (!rebase.ok) return rebase;
 
-    const newHead = await deps.git.run(dir, ['show-ref', '--head', '-s', '/HEAD']);
+    const newHead = await runGit(deps, dir, ['show-ref', '--head', '-s', '/HEAD'], deadline);
     if (!newHead.ok) return newHead;
 
     if (newHead.value.stdout === head.value.stdout) {
@@ -228,13 +272,12 @@ export async function rebaseOntoBase(
       return ok(null);
     }
 
-    const push = await deps.git.run(dir, [
-      'push',
-      '--quiet',
-      '--force-with-lease',
-      'origin',
-      pullRequest.head.ref,
-    ]);
+    const push = await runGit(
+      deps,
+      dir,
+      ['push', '--quiet', '--force-with-lease', 'origin', pullRequest.head.ref],
+      deadline,
+    );
     if (!push.ok) return push;
 
     deps.logger.info(
