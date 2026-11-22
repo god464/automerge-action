@@ -2,8 +2,7 @@ name: release-please
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -27,50 +26,43 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      - name: Find the release pull request
-        id: release-pr
+      - name: Checkout release PR
         if: steps.release.outputs.prs_created == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          branch=$(gh pr list \
-            --repo "$GITHUB_REPOSITORY" \
-            --label 'autorelease: pending' \
-            --json headRefName \
-            --jq '.[0].headRefName')
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@v7
-        if: steps.release-pr.outputs.branch != ''
+        uses: actions/checkout@v7
         with:
-          ref: ${{ steps.release-pr.outputs.branch }}
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          persist-credentials: false
 
-      - uses: pnpm/action-setup@v6
-        if: steps.release-pr.outputs.branch != ''
+      - name: Setup pnpm
+        if: steps.release.outputs.prs_created == 'true'
+        uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v7
-        if: steps.release-pr.outputs.branch != ''
+      - name: Setup Node.js
+        if: steps.release.outputs.prs_created == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
 
-      - name: Build dist into the release pull request
-        if: steps.release-pr.outputs.branch != ''
+      - name: Build release
+        if: steps.release.outputs.prs_created == 'true'
         run: |
           pnpm install --frozen-lockfile
           pnpm format
-          pnpm lint
-          pnpm typecheck
-          pnpm test
-          pnpm build
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "Release pull request is already prepared"
+          pnpm verify
+
+      - name: Commit dist
+        if: steps.release.outputs.prs_created == 'true'
+        run: |
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "Release PR is already prepared"
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git commit -m "chore: prepare release"
           git push
