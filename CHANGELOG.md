@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.6](https://github.com/god464/automerge-action/compare/v1.0.5...v1.0.6) (2026-11-22)
+
+
+### Bug Fixes
+
+* fix bundle ([97f2c88](https://github.com/god464/automerge-action/commit/97f2c88a506bb11d11a2bb0424ddd34b64a1d415))
+
 ## [1.0.5](https://github.com/god464/automerge-action/compare/v1.0.4...v1.0.5) (2026-11-22)
 
 ### Bug Fixes
