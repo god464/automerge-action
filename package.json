@@ -1,6 +1,6 @@
 {
   "name": "automerge-action",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "description": "GitHub action to automatically update and merge pull requests",
   "license": "MIT",
