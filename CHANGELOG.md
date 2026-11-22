@@ -2,10 +2,9 @@
 
 ## [1.0.4](https://github.com/god464/automerge-action/compare/v1.0.3...v1.0.4) (2026-11-22)
 
-
 ### Bug Fixes
 
-* target fork repositories safely and harden updates ([340cd4d](https://github.com/god464/automerge-action/commit/340cd4d144bb74454bda1076dd2c9eef001841d1))
+- target fork repositories safely and harden updates ([340cd4d](https://github.com/god464/automerge-action/commit/340cd4d144bb74454bda1076dd2c9eef001841d1))
 
 ## [1.0.3](https://github.com/god464/automerge-action/compare/v1.0.2...v1.0.3) (2026-11-18)
 
