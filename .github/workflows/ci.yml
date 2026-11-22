@@ -24,11 +24,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test:coverage
-      - run: pnpm build
+      - run: pnpm verify
       - name: Check dist is up to date
         if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
         run: git diff --exit-code -- dist

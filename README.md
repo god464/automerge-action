@@ -1,13 +1,11 @@
 # automerge-action
 
-GitHub Action that updates pull request branches that are behind their base
-branch and merges pull requests GitHub reports as ready when the configured
-labels match.
+A GitHub Action to automatically update and merge pull requests based on configurable labels and GitHub's merge readiness.
 
-This is a fork of
-[pascalgn/automerge-action](https://github.com/pascalgn/automerge-action)
-(MIT), rewritten around pure decision functions. Configuration is passed through
-action `inputs`.
+- **Update:** Bring PR branches up to date with the base branch using merge or rebase.
+- **Merge:** Automatically merge PRs when GitHub reports them as ready.
+
+Forked from [pascalgn/automerge-action](https://github.com/pascalgn/automerge-action) (MIT), with a decision-function-based implementation and input-based configuration.
 
 ## Usage
 
@@ -18,15 +16,7 @@ name: automerge
 
 on:
   pull_request:
-    types:
-      - labeled
-      - unlabeled
-      - synchronize
-      - opened
-      - edited
-      - ready_for_review
-      - reopened
-      - unlocked
+    types: [labeled, unlabeled, synchronize, opened, edited, ready_for_review, reopened, unlocked]
   pull_request_review:
     types: [submitted]
   workflow_run:
@@ -51,23 +41,32 @@ jobs:
           update-labels: automerge
           update-method: merge
 
-      - name: feedback
+      - name: Feedback
         if: steps.automerge.outputs.merge-result == 'merged'
-        run: echo "Merged pull request #${{ steps.automerge.outputs.pull-request-number }}"
+        run: echo "Merged PR #${{ steps.automerge.outputs.pull-request-number }}"
 ```
 
 ## Inputs
 
-| Input                  | Required | Default     | Description                                                                                         |
-| ---------------------- | -------- | ----------- | --------------------------------------------------------------------------------------------------- |
-| `github-token`         | yes      | –           | Token for GitHub API calls. Needs `contents: write` and `pull-requests: write`.                     |
-| `merge-labels`         | no       | `automerge` | Comma-separated labels required to merge. Prefix `!` to block. Empty string means no label filter.  |
-| `merge-method`         | no       | `merge`     | `merge`, `squash`, or `rebase`.                                                                     |
-| `merge-commit-message` | no       | `automatic` | `automatic` or `pull-request-title`.                                                                |
-| `update-labels`        | no       | `automerge` | Comma-separated labels required to update. Prefix `!` to block. Empty string means no label filter. |
-| `update-method`        | no       | `merge`     | `merge` (base into PR head) or `rebase` (PR head onto base).                                        |
+| Input                  | Default     | Description                                                                    |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------ |
+| `github-token`         | Required    | Token with `contents: write` and `pull-requests: write` permissions.           |
+| `merge-labels`         | `automerge` | Labels required for merging. Prefix `!` to exclude. Empty disables filtering.  |
+| `merge-method`         | `merge`     | Merge method: `merge`, `squash`, or `rebase`.                                  |
+| `merge-commit-message` | `automatic` | Commit message: `automatic` or `pull-request-title`.                           |
+| `update-labels`        | `automerge` | Labels required for updating. Prefix `!` to exclude. Empty disables filtering. |
+| `update-method`        | `merge`     | Update method: `merge` (base into PR) or `rebase` (PR onto base).              |
 
-## Token and permissions
+## Outputs
+
+| Output                | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `merge-result`        | `skipped`, `not_ready`, `merge_failed`, or `merged`. |
+| `pull-request-number` | PR number, or `0` if none.                           |
+
+## Permissions & Tokens
+
+The action requires:
 
 ```yaml
 permissions:
@@ -75,14 +74,10 @@ permissions:
   pull-requests: write
 ```
 
-Use `${{ secrets.GITHUB_TOKEN }}` unless one of these applies:
+Use `GITHUB_TOKEN` by default. Consider a GitHub App or PAT when:
 
-- Merging with `GITHUB_TOKEN` does not trigger `push` workflows on the base
-  branch.
-- Bot-updated pull requests may produce workflow runs in an approval-required
-  state. Use a GitHub App/PAT token for unattended CI, or approve runs manually.
-- A `pull_request` event from a fork has a read-only token. Prefer
-  `workflow_run`, `pull_request_target`, or a PAT/App token.
-- `pull_request_target` runs in the base repository context with a
-  write-capable token. Do not check out untrusted pull request code in a
-  `pull_request_target` workflow.
+- You need merges to trigger downstream `push` workflows.
+- Bot-created workflow runs require approval.
+- You need write access for pull requests from forks.
+
+**Security note:** `pull_request_target` provides write permissions in the base repository context. Never check out or execute untrusted pull request code in this workflow.
