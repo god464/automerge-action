@@ -6,7 +6,24 @@ export interface RepoRef {
 export interface BranchRef {
   readonly ref: string;
   readonly sha: string;
-  readonly repoFullName: string | null;
+  readonly repo: RepoRef | null;
+}
+
+export function repoFullName(repo: RepoRef): string {
+  return `${repo.owner}/${repo.repo}`;
+}
+
+export function sameRepo(left: RepoRef, right: RepoRef): boolean {
+  return (
+    left.owner.toLowerCase() === right.owner.toLowerCase() &&
+    left.repo.toLowerCase() === right.repo.toLowerCase()
+  );
+}
+
+export function compareHeadSpec(baseRepo: RepoRef, head: BranchRef): string {
+  return head.repo == null || sameRepo(head.repo, baseRepo)
+    ? head.ref
+    : `${head.repo.owner}:${head.ref}`;
 }
 
 export type PullRequestState = 'open' | 'closed';

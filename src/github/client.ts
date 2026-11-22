@@ -36,6 +36,12 @@ export interface MergeBaseParams {
   readonly baseRef: string;
 }
 
+export interface UpdatePullRequestBranchParams {
+  readonly repo: RepoRef;
+  readonly number: number;
+  readonly expectedHeadSha: string;
+}
+
 export type MergeBaseResult =
   | { readonly kind: 'merged'; readonly sha: string }
   | { readonly kind: 'up_to_date' };
@@ -64,4 +70,7 @@ export interface GitHubClient {
   readonly mergeBaseIntoHead: (
     params: MergeBaseParams,
   ) => Promise<Result<MergeBaseResult, GitHubError>>;
+  readonly updatePullRequestBranch: (
+    params: UpdatePullRequestBranchParams,
+  ) => Promise<Result<void, GitHubError>>;
 }

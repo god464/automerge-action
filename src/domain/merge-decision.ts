@@ -33,7 +33,7 @@ export function decideMerge(input: MergeInput): MergeDecision {
 
   if (pullRequest.merged) return { kind: 'skip', reason: 'already_merged' };
 
-  if (pullRequest.head.repoFullName == null) return { kind: 'skip', reason: 'head_repo_missing' };
+  if (pullRequest.head.repo == null) return { kind: 'skip', reason: 'head_repo_missing' };
 
   const labelReason = labelSkipReason(pullRequest.labels, input.filter);
   if (labelReason != null) return { kind: 'skip', reason: labelReason };

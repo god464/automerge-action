@@ -33,8 +33,8 @@ export function pullRequest(overrides: Partial<PullRequestSnapshot> = {}): PullR
     mergeable: true,
     mergeableState: 'clean',
     labels: ['automerge'],
-    head: { ref: 'feature', sha: 'head-sha', repoFullName: 'owner/repo' },
-    base: { ref: 'main', sha: 'base-sha', repoFullName: 'owner/repo' },
+    head: { ref: 'feature', sha: 'head-sha', repo: { owner: 'owner', repo: 'repo' } },
+    base: { ref: 'main', sha: 'base-sha', repo: { owner: 'owner', repo: 'repo' } },
     ...overrides,
   };
 }

@@ -72,8 +72,7 @@ function parseBranch(value: unknown): BranchRef | null {
     return null;
   }
 
-  const repo = recordOf(record['repo']);
-  return { ref, sha, repoFullName: repo == null ? null : stringField(repo, 'full_name') };
+  return { ref, sha, repo: parseRepo(record['repo']) };
 }
 
 function parseLabels(value: unknown): readonly string[] | null {
@@ -387,6 +386,20 @@ export function createGitHubClient(octokit: GitHubApi): GitHubClient {
         return parsed == null
           ? err({ kind: 'invalid_response', message: 'unexpected merge response shape' })
           : ok(parsed);
+      } catch (error) {
+        return err(toGitHubError(error));
+      }
+    },
+
+    updatePullRequestBranch: async (params) => {
+      try {
+        await octokit.rest.pulls.updateBranch({
+          owner: params.repo.owner,
+          repo: params.repo.repo,
+          pull_number: params.number,
+          expected_head_sha: params.expectedHeadSha,
+        });
+        return ok(undefined);
       } catch (error) {
         return err(toGitHubError(error));
       }

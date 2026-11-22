@@ -63,7 +63,11 @@ function pullRequestPayload(overrides: Record<string, unknown> = {}): Record<str
     mergeable: true,
     mergeable_state: 'clean',
     labels: [{ name: 'automerge' }, { name: 'ready' }],
-    head: { ref: 'feature', sha: 'head-sha', repo: { full_name: 'owner/repo' } },
+    head: {
+      ref: 'feature',
+      sha: 'head-sha',
+      repo: { name: 'repo', full_name: 'owner/repo', owner: { login: 'owner' } },
+    },
     base: {
       ref: 'main',
       sha: 'base-sha',
@@ -93,8 +97,8 @@ describe('getPullRequest', () => {
       mergeable: true,
       mergeableState: 'clean',
       labels: ['automerge', 'ready'],
-      head: { ref: 'feature', sha: 'head-sha', repoFullName: 'owner/repo' },
-      base: { ref: 'main', sha: 'base-sha', repoFullName: 'owner/repo' },
+      head: { ref: 'feature', sha: 'head-sha', repo: { owner: 'owner', repo: 'repo' } },
+      base: { ref: 'main', sha: 'base-sha', repo: { owner: 'owner', repo: 'repo' } },
     });
   });
 
@@ -328,6 +332,38 @@ describe('mergePullRequest', () => {
         })
       ).ok,
     ).toBe(false);
+  });
+});
+
+describe('updatePullRequestBranch', () => {
+  it('requests a branch update with the expected head sha', async () => {
+    const { client, requests } = createClient(() => ({
+      status: 202,
+      body: { message: 'Updating pull request branch.' },
+    }));
+
+    expect(
+      expectOk(
+        await client.updatePullRequestBranch({ repo, number: 7, expectedHeadSha: 'head-sha' }),
+      ),
+    ).toBeUndefined();
+    expect(requests[0]?.method).toEqual('PUT');
+    expect(requests[0]?.url.pathname).toEqual('/repos/owner/repo/pulls/7/update-branch');
+    expect(requests[0]?.body).toEqual({ expected_head_sha: 'head-sha' });
+  });
+
+  it('classifies a stale expected head sha as validation failure', async () => {
+    const { client } = createClient(() => ({
+      status: 422,
+      body: { message: 'expected head sha did not match' },
+    }));
+
+    expect(
+      await client.updatePullRequestBranch({ repo, number: 7, expectedHeadSha: 'old-sha' }),
+    ).toEqual({
+      ok: false,
+      error: { kind: 'validation', message: 'expected head sha did not match' },
+    });
   });
 });
 

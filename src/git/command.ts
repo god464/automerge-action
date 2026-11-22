@@ -40,6 +40,7 @@ const GIT_IDENTITY_ARGS = [
 ] as const;
 
 const GITHUB_AUTH_CONFIG_KEY = 'http.https://github.com/.extraheader';
+const TIMEOUT_KILL_GRACE_MS = 250;
 
 export interface GitRunnerOptions {
   readonly token?: string;
@@ -71,7 +72,18 @@ function terminate(child: ChildProcess): void {
 
   try {
     if (process.platform === 'win32') {
-      child.kill('SIGKILL');
+      const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      killer.on('error', () => {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // The process may already be gone.
+        }
+      });
+      killer.unref();
     } else {
       process.kill(-child.pid, 'SIGKILL');
     }
@@ -99,13 +111,18 @@ async function execute(
     detached: process.platform !== 'win32',
   });
 
+  let graceTimer: NodeJS.Timeout | undefined;
   const timer =
     timeoutMs == null
       ? undefined
       : setTimeout(() => {
-          if (child.exitCode != null || child.signalCode != null) return;
           timedOut = true;
           terminate(child);
+          graceTimer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            resolve({ exitCode: child.exitCode ?? 1, stdout, stderr, timedOut: true });
+          }, TIMEOUT_KILL_GRACE_MS);
         }, timeoutMs);
 
   child.stdout.setEncoding('utf8');
@@ -121,6 +138,7 @@ async function execute(
     if (settled) return;
     settled = true;
     clearTimeout(timer);
+    clearTimeout(graceTimer);
     reject(error);
   });
 
@@ -128,6 +146,7 @@ async function execute(
     if (settled) return;
     settled = true;
     clearTimeout(timer);
+    clearTimeout(graceTimer);
     resolve({ exitCode: code ?? 1, stdout, stderr, timedOut });
   });
 

@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import type { PullRequestSnapshot, RepoRef } from '@/domain/pull-request';
 import type { ParsedEvent } from '@/events/event';
 import { err, ok } from '@/result';
-import type { ProcessDeps } from '@/run/process-pull-request';
-import { processPullRequest } from '@/run/process-pull-request';
+import {
+  type ProcessDeps,
+  processUpdateAndMerge,
+  processUpdateOnly,
+} from '@/run/process-pull-request';
+import type { RunResult } from '@/run/result';
 import { runFromEvent } from '@/run/run';
 
 import { config, pullRequest } from './factories';
@@ -28,6 +33,20 @@ function deps(overrides: Partial<ProcessDeps> = {}): ProcessDeps {
     cloneUrl: (repoFullName) => `/tmp/${repoFullName}`,
     ...overrides,
   };
+}
+
+async function processPullRequest(
+  processDeps: ProcessDeps,
+  processRepo: RepoRef,
+  number: number,
+  mode: 'update_and_merge' | 'update_only',
+  existingSnapshot?: PullRequestSnapshot,
+): Promise<RunResult> {
+  const outcome =
+    mode === 'update_only'
+      ? await processUpdateOnly(processDeps, processRepo, number, existingSnapshot)
+      : await processUpdateAndMerge(processDeps, processRepo, number);
+  return outcome.result;
 }
 
 describe('processPullRequest', () => {
@@ -62,12 +81,77 @@ describe('processPullRequest', () => {
       mergeBaseIntoHead: async () => ok({ kind: 'merged', sha: 'new-head' }),
     });
 
-    const result = await processPullRequest(deps({ client }), repo, 1, 'update_and_merge');
+    const report = await runFromEvent(deps({ client }), {
+      kind: 'pull_request',
+      action: 'labeled',
+      repo,
+      pullRequestNumber: 1,
+    });
 
-    expect(result).toEqual({ result: 'merged', pullRequestNumber: 1 });
+    expect(report.primary).toEqual({ result: 'merged', pullRequestNumber: 1 });
     expect(client.calls.listOpenPullRequests).toHaveLength(1);
     expect(client.calls.getPullRequest.map((call) => call.number)).toEqual([1]);
     expect(client.calls.mergeBaseIntoHead).toHaveLength(1);
+    expect(client.calls.mergePullRequest).toHaveLength(1);
+  });
+
+  it('uses the refreshed base branch for post-merge fan-out', async () => {
+    const initial = pullRequest({
+      mergeableState: 'behind',
+      base: { ref: 'release', sha: 'base-sha', repo: { owner: 'owner', repo: 'repo' } },
+    });
+    const refreshed = pullRequest({
+      mergeableState: 'clean',
+      base: { ref: 'main', sha: 'base-sha', repo: { owner: 'owner', repo: 'repo' } },
+    });
+    const client = createSequenceClient([initial, refreshed]);
+
+    const report = await runFromEvent(deps({ client }), {
+      kind: 'pull_request',
+      action: 'labeled',
+      repo,
+      pullRequestNumber: 1,
+    });
+
+    expect(report.primary).toEqual({ result: 'merged', pullRequestNumber: 1 });
+    expect(client.calls.listOpenPullRequests.at(0)?.filter.base).toEqual('main');
+  });
+
+  it('requests a branch update for a behind fork pull request', async () => {
+    const head = { ref: 'feature', sha: 'head-sha', repo: { owner: 'alice', repo: 'repo' } };
+    const behind = pullRequest({ mergeableState: 'behind', head });
+    const refreshed = pullRequest({
+      mergeableState: 'clean',
+      head: { ...head, sha: 'new-head-sha' },
+    });
+    const client = createSequenceClient([behind, refreshed]);
+
+    const result = await processPullRequest(deps({ client }), repo, 1, 'update_and_merge');
+
+    expect(result).toEqual({ result: 'merged', pullRequestNumber: 1 });
+    expect(client.calls.updatePullRequestBranch).toEqual([
+      { repo, number: 1, expectedHeadSha: 'head-sha' },
+    ]);
+    expect(client.calls.mergeBaseIntoHead).toHaveLength(0);
+    expect(client.calls.mergePullRequest).toHaveLength(1);
+  });
+
+  it('does not fall back to the base repository when a fork update fails', async () => {
+    const head = { ref: 'feature', sha: 'head-sha', repo: { owner: 'alice', repo: 'repo' } };
+    const behind = pullRequest({ mergeableState: 'behind', head });
+    const refreshed = pullRequest({
+      mergeableState: 'clean',
+      head: { ...head, sha: 'new-head-sha' },
+    });
+    const client = createSequenceClient([behind, refreshed], {
+      updatePullRequestBranch: async () => err({ kind: 'validation', message: 'stale head' }),
+    });
+
+    const result = await processPullRequest(deps({ client }), repo, 1, 'update_and_merge');
+
+    expect(result).toEqual({ result: 'merged', pullRequestNumber: 1 });
+    expect(client.calls.updatePullRequestBranch).toHaveLength(1);
+    expect(client.calls.mergeBaseIntoHead).toHaveLength(0);
     expect(client.calls.mergePullRequest).toHaveLength(1);
   });
 
@@ -94,6 +178,30 @@ describe('processPullRequest', () => {
     expect(client.calls.compareCommits).toHaveLength(1);
     expect(client.calls.mergeBaseIntoHead).toHaveLength(0);
     expect(client.calls.mergePullRequest).toHaveLength(0);
+  });
+
+  it('qualifies a fork head when comparing behind status', async () => {
+    const fork = pullRequest({
+      mergeableState: 'blocked',
+      head: { ref: 'feature', sha: 'head-sha', repo: { owner: 'alice', repo: 'repo' } },
+    });
+    const client = createSequenceClient([fork]);
+
+    await processPullRequest(deps({ client }), repo, 1, 'update_and_merge');
+
+    expect(client.calls.compareCommits.at(0)).toEqual({
+      repo,
+      base: 'main',
+      head: 'alice:feature',
+    });
+  });
+
+  it('uses a bare head ref for same-repository comparisons', async () => {
+    const client = createSequenceClient([pullRequest({ mergeableState: 'blocked' })]);
+
+    await processPullRequest(deps({ client }), repo, 1, 'update_and_merge');
+
+    expect(client.calls.compareCommits.at(0)).toEqual({ repo, base: 'main', head: 'feature' });
   });
 
   it('updates a blocked pull request that is behind but does not merge it', async () => {
@@ -129,7 +237,7 @@ describe('processPullRequest', () => {
     expect(client.calls.mergePullRequest).toHaveLength(0);
   });
 
-  it('does not retry unknown mergeability in update_only mode', async () => {
+  it('retries unknown mergeability once in update_only mode', async () => {
     const client = createFakeClient({
       getPullRequest: async (nextRepo, number) =>
         ok(pullRequest({ repo: nextRepo, number, mergeableState: 'unknown' })),
@@ -144,9 +252,66 @@ describe('processPullRequest', () => {
     );
 
     expect(result).toEqual({ result: 'skipped', pullRequestNumber: undefined });
+    expect(client.calls.getPullRequest).toHaveLength(2);
+    expect(sleep.calls).toEqual([1000]);
+    expect(client.calls.mergeBaseIntoHead).toHaveLength(0);
+  });
+
+  it('skips update-only when the first fetch fails', async () => {
+    const client = createFakeClient({
+      getPullRequest: async () => err({ kind: 'server', status: 500, message: 'boom' }),
+    });
+    const sleep = createFakeSleep();
+
+    const result = await processPullRequest(
+      deps({ client, sleep: sleep.sleep }),
+      repo,
+      1,
+      'update_only',
+    );
+
+    expect(result).toEqual({ result: 'skipped', pullRequestNumber: undefined });
     expect(client.calls.getPullRequest).toHaveLength(1);
     expect(sleep.calls).toEqual([]);
-    expect(client.calls.mergeBaseIntoHead).toHaveLength(0);
+  });
+
+  it('does not warn about skipping an unstable update that the compare updates', async () => {
+    const unstable = pullRequest({ mergeable: null, mergeableState: 'unstable' });
+    const client = createSequenceClient([unstable, unstable], {
+      compareCommits: async () => ok({ behindBy: 2, aheadBy: 0 }),
+      mergeBaseIntoHead: async () => ok({ kind: 'merged', sha: 'new-head' }),
+    });
+    const logger = createFakeLogger();
+
+    const result = await processPullRequest(deps({ client, logger }), repo, 1, 'update_only');
+
+    expect(result).toEqual({ result: 'skipped', pullRequestNumber: undefined });
+    expect(client.calls.mergeBaseIntoHead).toHaveLength(1);
+    expect(logger.warningMessages.join('\n')).not.toContain('skipping update');
+  });
+
+  it('skips update-only when the retry fetch fails', async () => {
+    let gets = 0;
+    const client = createFakeClient({
+      getPullRequest: async (nextRepo, number) => {
+        gets += 1;
+        return gets === 1
+          ? ok(pullRequest({ repo: nextRepo, number, mergeableState: 'unknown' }))
+          : err({ kind: 'server', status: 500, message: 'boom' });
+      },
+    });
+    const sleep = createFakeSleep();
+
+    const result = await processPullRequest(
+      deps({ client, sleep: sleep.sleep }),
+      repo,
+      1,
+      'update_only',
+    );
+
+    expect(result).toEqual({ result: 'skipped', pullRequestNumber: undefined });
+    expect(client.calls.getPullRequest).toHaveLength(2);
+    expect(sleep.calls).toEqual([1000]);
   });
 
   it('merges after a failed update when the refreshed snapshot is clean', async () => {
@@ -399,10 +564,14 @@ describe('processPullRequest', () => {
       listOpenPullRequests: async () => err({ kind: 'server', status: 500, message: 'boom' }),
     });
 
-    expect(await processPullRequest(deps({ client }), repo, 1, 'update_and_merge')).toEqual({
-      result: 'merged',
+    const report = await runFromEvent(deps({ client }), {
+      kind: 'pull_request',
+      action: 'labeled',
+      repo,
       pullRequestNumber: 1,
     });
+
+    expect(report.primary).toEqual({ result: 'merged', pullRequestNumber: 1 });
   });
 
   it('caps the number of other pull requests updated after a merge', async () => {
@@ -414,7 +583,12 @@ describe('processPullRequest', () => {
       mergeBaseIntoHead: async () => ok({ kind: 'merged', sha: 'new-head' }),
     });
 
-    await processPullRequest(deps({ client }), repo, 1, 'update_and_merge');
+    await runFromEvent(deps({ client }), {
+      kind: 'pull_request',
+      action: 'labeled',
+      repo,
+      pullRequestNumber: 1,
+    });
 
     expect(client.calls.mergeBaseIntoHead).toHaveLength(10);
   });
@@ -560,9 +734,11 @@ describe('runFromEvent', () => {
     expect(client.calls.mergeBaseIntoHead).toHaveLength(1);
   });
 
-  it('does not retry unknown mergeability for listed update-only pull requests', async () => {
+  it('retries unknown mergeability once for listed update-only pull requests', async () => {
     const client = createFakeClient({
       listOpenPullRequests: async () => ok([pullRequest({ number: 2, mergeableState: 'unknown' })]),
+      getPullRequest: async (nextRepo, number) =>
+        ok(pullRequest({ repo: nextRepo, number, mergeableState: 'unknown' })),
     });
     const sleep = createFakeSleep();
     const event: ParsedEvent = {
@@ -578,9 +754,9 @@ describe('runFromEvent', () => {
 
     await runFromEvent(deps({ client, sleep: sleep.sleep }), event);
 
-    expect(client.calls.getPullRequest).toHaveLength(0);
+    expect(client.calls.getPullRequest).toHaveLength(2);
     expect(client.calls.listOpenPullRequests).toHaveLength(1);
-    expect(sleep.calls).toEqual([]);
+    expect(sleep.calls).toEqual([1000]);
     expect(client.calls.mergeBaseIntoHead).toHaveLength(0);
   });
 
@@ -589,7 +765,7 @@ describe('runFromEvent', () => {
       pullRequest({
         number,
         mergeableState: 'behind',
-        head: { ref: `feature-${number}`, sha: 'head-sha', repoFullName: 'owner/repo' },
+        head: { ref: `feature-${number}`, sha: 'head-sha', repo: { owner: 'owner', repo: 'repo' } },
       }),
     );
     const client = createFakeClient({
@@ -645,7 +821,6 @@ describe('runFromEvent', () => {
 
     const report = await runFromEvent(deps({ client }), event);
 
-    expect(report.all).toHaveLength(2);
     expect(report.primary).toEqual({ result: 'merged', pullRequestNumber: 1 });
     expect(client.calls.mergePullRequest.map((call) => call.number)).toEqual([1, 2]);
   });
@@ -713,7 +888,7 @@ describe('runFromEvent', () => {
 
     const report = await runFromEvent(deps({ client }), event);
 
-    expect(report.all.map((result) => result.pullRequestNumber)).toEqual([1, 2]);
+    expect(report.primary).toEqual({ result: 'merged', pullRequestNumber: 1 });
     expect(client.calls.mergePullRequest).toHaveLength(2);
   });
 

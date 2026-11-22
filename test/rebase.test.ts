@@ -23,12 +23,13 @@ interface Script {
   readonly fetch?: Reply | ((args: readonly string[]) => Reply);
   readonly mergeBase?: (args: readonly string[]) => Reply;
   readonly head?: Reply;
+  readonly trackedHead?: Reply;
   readonly onto?: Reply;
   readonly rebase?: Reply;
   readonly newHead?: Reply;
   readonly push?: Reply;
-  readonly revList?: Reply;
   readonly shallow?: Reply;
+  readonly remote?: Reply;
 }
 
 function scriptedGit(script: Script) {
@@ -43,14 +44,18 @@ function scriptedGit(script: Script) {
           ? script.fetch(args)
           : (script.fetch ?? success());
       if (args[0] === 'merge-base') return script.mergeBase?.(args) ?? success('base-sha');
-      if (args[0] === 'rev-list') return script.revList ?? success();
       if (args[0] === 'rev-parse') return script.shallow ?? success('true');
+      if (args[0] === 'remote') return script.remote ?? success();
       if (args[0] === 'show-ref') {
-        if (!args.includes('/HEAD')) return script.onto ?? success('onto-sha');
-        headLookups += 1;
-        return headLookups === 1
-          ? (script.head ?? success('head-sha'))
-          : (script.newHead ?? success('head-sha'));
+        const ref = args.at(-1);
+        if (ref === '/HEAD') {
+          headLookups += 1;
+          return headLookups === 1
+            ? (script.head ?? success('head-sha'))
+            : (script.newHead ?? success('head-sha'));
+        }
+        if (ref === 'refs/remotes/origin/feature') return script.trackedHead ?? success('head-sha');
+        return script.onto ?? success('onto-sha');
       }
       if (args[0] === 'rebase') return script.rebase ?? success();
       if (args[0] === 'push') return script.push ?? success();
@@ -66,7 +71,16 @@ function deps(git: GitRunner, now: () => number = () => 0) {
 }
 
 function rebaseHead() {
-  return pullRequest({ head: { ref: 'feature', sha: 'head-sha', repoFullName: 'owner/repo' } });
+  return pullRequest({
+    head: { ref: 'feature', sha: 'head-sha', repo: { owner: 'owner', repo: 'repo' } },
+  });
+}
+
+function forkHead() {
+  return pullRequest({
+    repo: { owner: 'owner', repo: 'repo' },
+    head: { ref: 'feature', sha: 'head-sha', repo: { owner: 'alice', repo: 'repo' } },
+  });
 }
 
 describe('rebaseOntoBase failures', () => {
@@ -76,7 +90,7 @@ describe('rebaseOntoBase failures', () => {
     expect(
       await rebaseOntoBase(
         deps(git),
-        pullRequest({ head: { ref: 'feature', sha: 'head-sha', repoFullName: null } }),
+        pullRequest({ head: { ref: 'feature', sha: 'head-sha', repo: null } }),
       ),
     ).toEqual({ ok: false, error: { kind: 'head_repo_missing' } });
     expect(calls).toEqual([]);
@@ -87,6 +101,7 @@ describe('rebaseOntoBase failures', () => {
     ['fetch', { fetch: conflict }, conflict],
     ['merge base', { mergeBase: () => conflict }, conflict],
     ['head lookup', { head: conflict }, conflict],
+    ['tracked head lookup', { trackedHead: conflict }, conflict],
     ['base lookup', { onto: conflict }, conflict],
     ['rebase', { rebase: conflict }, conflict],
     ['new head lookup', { newHead: conflict }, conflict],
@@ -95,13 +110,27 @@ describe('rebaseOntoBase failures', () => {
     expect(await rebaseOntoBase(deps(scriptedGit(script).git), rebaseHead())).toEqual(expected);
   });
 
-  it('refuses to push when the head branch moved', async () => {
+  it('refuses to push when the local head moved', async () => {
     const { git } = scriptedGit({ head: success('someone-else') });
 
     expect(await rebaseOntoBase(deps(git), rebaseHead())).toEqual({
       ok: false,
       error: { kind: 'head_changed', expected: 'head-sha', actual: 'someone-else' },
     });
+  });
+
+  it('refuses to push when the remote head moved after the clone', async () => {
+    const { git, calls } = scriptedGit({
+      head: success('head-sha'),
+      trackedHead: success('someone-else'),
+      newHead: success('new-sha'),
+    });
+
+    expect(await rebaseOntoBase(deps(git), rebaseHead())).toEqual({
+      ok: false,
+      error: { kind: 'head_changed', expected: 'head-sha', actual: 'someone-else' },
+    });
+    expect(calls.some((call) => call.args[0] === 'push')).toBe(false);
   });
 
   it('reports no update when the rebase is a no-op', async () => {
@@ -120,6 +149,44 @@ describe('rebaseOntoBase failures', () => {
     expect(clone).not.toContain('--shallow-submodules');
     expect(clone).toEqual(
       expect.arrayContaining(['--branch', 'feature', '--depth', '10', 'clone-url']),
+    );
+  });
+
+  it('adds a separate base remote for a fork pull request', async () => {
+    const { git, calls } = scriptedGit({ head: success('head-sha'), newHead: success('new-sha') });
+
+    expect(await rebaseOntoBase(deps(git), forkHead())).toEqual(ok('new-sha'));
+    expect(calls.find((call) => call.args[0] === 'remote')?.args).toEqual([
+      'remote',
+      'add',
+      'base',
+      'clone-url',
+    ]);
+    expect(calls.find((call) => call.args[0] === 'fetch')?.args).toEqual(
+      expect.arrayContaining(['base', 'main:refs/remotes/base/main']),
+    );
+  });
+
+  it('deepens the base and head remotes separately for a fork', async () => {
+    let mergeBases = 0;
+    const { git, calls } = scriptedGit({
+      mergeBase: () => {
+        mergeBases += 1;
+        return mergeBases === 1 ? ok({ stdout: '', exitCode: 1 }) : success('base-sha');
+      },
+      head: success('head-sha'),
+      newHead: success('head-sha'),
+    });
+
+    expect(await rebaseOntoBase(deps(git), forkHead())).toEqual(ok(null));
+
+    const deepens = calls
+      .filter((call) => call.args[0] === 'fetch' && call.args.includes('--deepen'))
+      .map((call) => call.args);
+    expect(deepens).toHaveLength(2);
+    expect(deepens[0]).toEqual(expect.arrayContaining(['base', 'main:refs/remotes/base/main']));
+    expect(deepens[1]).toEqual(
+      expect.arrayContaining(['origin', '+refs/heads/feature:refs/remotes/origin/feature']),
     );
   });
 
@@ -146,9 +213,13 @@ describe('rebaseOntoBase failures', () => {
         clock += 1000;
         if (args[0] === 'merge-base') return success('base-sha');
         if (args[0] === 'show-ref') {
-          if (!args.includes('/HEAD')) return success('onto-sha');
-          heads += 1;
-          return success(heads === 1 ? 'head-sha' : 'new-sha');
+          const ref = args.at(-1);
+          if (ref === '/HEAD') {
+            heads += 1;
+            return success(heads === 1 ? 'head-sha' : 'new-sha');
+          }
+          if (ref === 'refs/remotes/origin/feature') return success('head-sha');
+          return success('onto-sha');
         }
         return success();
       },
@@ -165,7 +236,7 @@ describe('rebaseOntoBase failures', () => {
       'clone',
       'fetch',
       'merge-base',
-      'rev-list',
+      'show-ref',
       'show-ref',
       'show-ref',
       'rebase',
@@ -205,56 +276,21 @@ describe('rebaseOntoBase failures', () => {
     expect(calls).toEqual(['clone']);
   });
 
-  it('pushes the rebased head and returns the new SHA', async () => {
+  it('pushes the rebased head with an explicit lease and returns the new SHA', async () => {
     const { git, calls } = scriptedGit({ head: success('head-sha'), newHead: success('new-sha') });
 
     expect(await rebaseOntoBase(deps(git), rebaseHead())).toEqual(ok('new-sha'));
     expect(calls.find((call) => call.args[0] === 'push')?.args).toEqual([
       'push',
       '--quiet',
-      '--force-with-lease',
+      '--force-with-lease=refs/heads/feature:head-sha',
       'origin',
       'feature',
     ]);
   });
 });
 
-describe('findEarliestBase failures', () => {
-  it('propagates rev-list failures', async () => {
-    const { git } = scriptedGit({ mergeBase: () => success('base-sha'), revList: conflict });
-
-    expect(await rebaseOntoBase(deps(git), rebaseHead())).toEqual(conflict);
-  });
-
-  it('propagates parent merge-base failures', async () => {
-    const { git } = scriptedGit({
-      mergeBase: (args) => (args[1] === 'HEAD' ? success('base-sha') : conflict),
-      revList: success('commit parent-a parent-b'),
-    });
-
-    expect(await rebaseOntoBase(deps(git), rebaseHead())).toEqual(conflict);
-  });
-
-  it('reports no base when a merge parent has no common ancestor', async () => {
-    const clock = { value: 0 };
-    const { git } = scriptedGit({
-      mergeBase: (args) =>
-        args[1] === 'HEAD' ? success('base-sha') : ok({ stdout: '', exitCode: 1 }),
-      revList: success('commit parent-a parent-b'),
-      fetch: (args) => {
-        if (args.includes('--deepen')) clock.value = REBASE_TIMEOUT_MS + 1;
-        return success();
-      },
-    });
-
-    expect(
-      await rebaseOntoBase(
-        deps(git, () => clock.value),
-        rebaseHead(),
-      ),
-    ).toEqual({ ok: false, error: { kind: 'timeout' } });
-  });
-
+describe('common ancestor failures', () => {
   it('reports no common ancestor once the repository is complete', async () => {
     const { git, calls } = scriptedGit({
       mergeBase: () => ok({ stdout: '', exitCode: 1 }),

@@ -1,1 +1,1 @@
-export const MAX_PULL_REQUESTS_PER_RUN = 10;
+export const MAX_PULL_REQUESTS_PER_LIST = 10;

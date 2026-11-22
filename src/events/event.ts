@@ -21,6 +21,7 @@ export type StatusWebhook = OperationPayload<'status'>;
 
 export const EVENT_NAMES = [
   'pull_request',
+  'pull_request_target',
   'pull_request_review',
   'workflow_run',
   'check_suite',

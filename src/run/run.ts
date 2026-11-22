@@ -1,38 +1,40 @@
-import type { PullRequestSnapshot } from '@/domain/pull-request';
+import type { RepoRef } from '@/domain/pull-request';
 import type { ParsedEvent } from '@/events/event';
 import type { EventTargets } from '@/events/targets';
 import { resolveTargets } from '@/events/targets';
 import { assertNever } from '@/result';
 
-import { MAX_PULL_REQUESTS_PER_RUN } from './limits';
-import { type ProcessDeps, processPullRequest } from './process-pull-request';
+import { MAX_PULL_REQUESTS_PER_LIST } from './limits';
+import {
+  type ProcessDeps,
+  processUpdateAndMerge,
+  updatePullRequestsByBase,
+} from './process-pull-request';
 import { type RunReport, type RunResult, skippedReport } from './result';
 
 function reportOf(results: readonly RunResult[]): RunReport {
-  return {
-    primary: results[0] ?? { result: 'skipped', pullRequestNumber: undefined },
-    all: results,
-  };
+  return { primary: results[0] ?? { result: 'skipped', pullRequestNumber: undefined } };
 }
 
 function uniqueNumbers(numbers: readonly number[]): readonly number[] {
-  return [...new Set(numbers)].slice(0, MAX_PULL_REQUESTS_PER_RUN);
+  return [...new Set(numbers)].slice(0, MAX_PULL_REQUESTS_PER_LIST);
 }
 
-function uniquePullRequests(
-  pullRequests: readonly PullRequestSnapshot[],
-): readonly PullRequestSnapshot[] {
-  const seen = new Set<number>();
-  const unique: PullRequestSnapshot[] = [];
-
-  for (const pullRequest of pullRequests) {
-    if (seen.has(pullRequest.number)) continue;
-    seen.add(pullRequest.number);
-    unique.push(pullRequest);
-    if (unique.length === MAX_PULL_REQUESTS_PER_RUN) break;
+async function processAndFanOut(
+  deps: ProcessDeps,
+  repo: RepoRef,
+  number: number,
+): Promise<RunResult> {
+  const outcome = await processUpdateAndMerge(deps, repo, number);
+  if (outcome.mergedSnapshot != null) {
+    await updatePullRequestsByBase(
+      deps,
+      outcome.mergedSnapshot.repo,
+      outcome.mergedSnapshot.base.ref,
+      outcome.mergedSnapshot.number,
+    );
   }
-
-  return unique;
+  return outcome.result;
 }
 
 async function executePullRequests(
@@ -42,7 +44,7 @@ async function executePullRequests(
   const numbers = uniqueNumbers(target.numbers);
   const results: RunResult[] = [];
   for (const number of numbers) {
-    results.push(await processPullRequest(deps, target.repo, number, target.mode));
+    results.push(await processAndFanOut(deps, target.repo, number));
   }
 
   return reportOf(results);
@@ -68,7 +70,7 @@ async function executeByCommit(
 
   const results: RunResult[] = [];
   for (const number of numbers) {
-    results.push(await processPullRequest(deps, target.repo, number, target.mode));
+    results.push(await processAndFanOut(deps, target.repo, number));
   }
 
   return reportOf(results);
@@ -78,34 +80,14 @@ async function executeByBase(
   deps: ProcessDeps,
   target: Extract<EventTargets, { readonly kind: 'pull_requests_by_base' }>,
 ): Promise<RunReport> {
-  const summaries = await deps.client.listOpenPullRequests(target.repo, {
-    base: target.base,
-    perPage: MAX_PULL_REQUESTS_PER_RUN,
-  });
-  if (!summaries.ok) {
-    deps.logger.warning(
-      `Failed to list pull requests based on ${target.base}: ${summaries.error.kind}`,
-    );
-    return skippedReport();
-  }
-
-  const pullRequests = uniquePullRequests(summaries.value);
-  if (pullRequests.length === 0) {
-    deps.logger.info(`No open pull requests based on ${target.base}`);
-    return skippedReport();
-  }
-
-  for (const pullRequest of pullRequests) {
-    await processPullRequest(deps, target.repo, pullRequest.number, target.mode, pullRequest);
-  }
-  deps.logger.info(`Processed ${pullRequests.length} pull request(s) based on ${target.base}`);
+  await updatePullRequestsByBase(deps, target.repo, target.base);
   return skippedReport();
 }
 
 async function executeTarget(deps: ProcessDeps, target: EventTargets): Promise<RunReport> {
   switch (target.kind) {
     case 'pull_request':
-      return reportOf([await processPullRequest(deps, target.repo, target.number, target.mode)]);
+      return reportOf([await processAndFanOut(deps, target.repo, target.number)]);
     case 'pull_requests':
       return executePullRequests(deps, target);
     case 'pull_requests_by_commit':

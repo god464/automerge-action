@@ -9,6 +9,7 @@ import type {
   MergeBaseResult,
   MergePullRequestParams,
   PullRequestFilter,
+  UpdatePullRequestBranchParams,
 } from '@/github/client';
 import { ok, type Result } from '@/result';
 
@@ -25,6 +26,7 @@ export interface FakeClientCalls {
   }[];
   readonly mergePullRequest: MergePullRequestParams[];
   readonly mergeBaseIntoHead: MergeBaseParams[];
+  readonly updatePullRequestBranch: UpdatePullRequestBranchParams[];
 }
 
 export interface FakeClientOptions {
@@ -51,6 +53,9 @@ export interface FakeClientOptions {
   readonly mergeBaseIntoHead?: (
     params: MergeBaseParams,
   ) => Promise<Result<MergeBaseResult, GitHubError>>;
+  readonly updatePullRequestBranch?: (
+    params: UpdatePullRequestBranchParams,
+  ) => Promise<Result<void, GitHubError>>;
 }
 
 export interface FakeClient extends GitHubClient {
@@ -65,6 +70,7 @@ export function createFakeClient(options: FakeClientOptions = {}): FakeClient {
     compareCommits: [],
     mergePullRequest: [],
     mergeBaseIntoHead: [],
+    updatePullRequestBranch: [],
   };
 
   return {
@@ -104,6 +110,12 @@ export function createFakeClient(options: FakeClientOptions = {}): FakeClient {
       return options.mergeBaseIntoHead == null
         ? ok({ kind: 'up_to_date' })
         : options.mergeBaseIntoHead(params);
+    },
+    updatePullRequestBranch: async (params) => {
+      calls.updatePullRequestBranch.push(params);
+      return options.updatePullRequestBranch == null
+        ? ok(undefined)
+        : options.updatePullRequestBranch(params);
     },
   };
 }

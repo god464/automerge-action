@@ -28,7 +28,7 @@ export function updateEligibility(
 
   if (pullRequest.merged) return 'already_merged';
 
-  if (pullRequest.head.repoFullName == null) return 'head_repo_missing';
+  if (pullRequest.head.repo == null) return 'head_repo_missing';
 
   return labelSkipReason(pullRequest.labels, filter);
 }

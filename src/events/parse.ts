@@ -70,13 +70,14 @@ function isSupportedEventName(value: string): value is EventName {
 
 function parsePullRequestEvent(
   payload: Readonly<Record<string, unknown>>,
+  eventName: string,
 ): Result<PullRequestEvent, EventParseError> {
   const pullRequest = recordOf(payload['pull_request']);
   const repo = repoFrom(payload['repository']);
   const number = pullRequest == null ? null : numberField(pullRequest, 'number');
 
   if (stringField(payload, 'action') == null || repo == null || number == null || number <= 0)
-    return malformed('pull_request', 'missing action, repository, or pull_request.number');
+    return malformed(eventName, 'missing action, repository, or pull_request.number');
 
   const event = payload as unknown as PullRequestWebhook;
   return ok({
@@ -202,7 +203,8 @@ export function parseEvent(
 
   switch (eventName) {
     case 'pull_request':
-      return parsePullRequestEvent(record);
+    case 'pull_request_target':
+      return parsePullRequestEvent(record, eventName);
     case 'pull_request_review':
       return parsePullRequestReviewEvent(record);
     case 'workflow_run':

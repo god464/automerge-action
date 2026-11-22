@@ -42,6 +42,15 @@ describe('parseEvent', () => {
     expect(event).toEqual({ kind: 'pull_request', action: 'labeled', repo, pullRequestNumber: 7 });
   });
 
+  it('parses pull_request_target events like pull_request', () => {
+    expect(expectOk(parseEvent('pull_request_target', pullRequestPayload()))).toEqual({
+      kind: 'pull_request',
+      action: 'labeled',
+      repo,
+      pullRequestNumber: 7,
+    });
+  });
+
   it('parses pull_request_review events', () => {
     const event = expectOk(
       parseEvent('pull_request_review', {
@@ -195,12 +204,15 @@ describe('parseEvent', () => {
 });
 
 describe('resolveTargets', () => {
-  const pullRequestTarget = { kind: 'pull_request', repo, number: 7, mode: 'update_and_merge' };
+  const pullRequestTarget = { kind: 'pull_request', repo, number: 7 };
 
   it('resolves relevant pull_request actions and ignores the rest', () => {
     expect(resolveTargets(expectOk(parseEvent('pull_request', pullRequestPayload())))).toEqual(
       pullRequestTarget,
     );
+    expect(
+      resolveTargets(expectOk(parseEvent('pull_request_target', pullRequestPayload()))),
+    ).toEqual(pullRequestTarget);
     expect(
       resolveTargets(expectOk(parseEvent('pull_request', pullRequestPayload('closed')))),
     ).toEqual({ kind: 'ignored', reason: 'pull_request action ignored: closed' });
@@ -256,18 +268,8 @@ describe('resolveTargets', () => {
       }),
     );
 
-    expect(resolveTargets(pullRequestRun)).toEqual({
-      kind: 'pull_requests',
-      repo,
-      numbers: [8],
-      mode: 'update_and_merge',
-    });
-    expect(resolveTargets(pushRun)).toEqual({
-      kind: 'pull_requests_by_base',
-      repo,
-      base: 'main',
-      mode: 'update_only',
-    });
+    expect(resolveTargets(pullRequestRun)).toEqual({ kind: 'pull_requests', repo, numbers: [8] });
+    expect(resolveTargets(pushRun)).toEqual({ kind: 'pull_requests_by_base', repo, base: 'main' });
   });
 
   it('falls back to commit SHA for fork pull requests', () => {
@@ -285,12 +287,7 @@ describe('resolveTargets', () => {
       }),
     );
 
-    expect(resolveTargets(event)).toEqual({
-      kind: 'pull_requests_by_commit',
-      repo,
-      sha: 'sha',
-      mode: 'update_and_merge',
-    });
+    expect(resolveTargets(event)).toEqual({ kind: 'pull_requests_by_commit', repo, sha: 'sha' });
   });
 
   it('maps incomplete and failed checks to not_ready', () => {
@@ -338,14 +335,8 @@ describe('resolveTargets', () => {
       kind: 'pull_requests_by_commit',
       repo,
       sha: 'sha',
-      mode: 'update_and_merge',
     });
-    expect(resolveTargets(status)).toEqual({
-      kind: 'pull_requests_by_commit',
-      repo,
-      sha: 'sha',
-      mode: 'update_and_merge',
-    });
+    expect(resolveTargets(status)).toEqual({ kind: 'pull_requests_by_commit', repo, sha: 'sha' });
     expect(resolveTargets(failedStatus).kind).toEqual('ignored');
   });
 
@@ -392,12 +383,7 @@ describe('resolveTargets', () => {
       }),
     );
 
-    expect(resolveTargets(event)).toEqual({
-      kind: 'pull_requests',
-      repo,
-      numbers: [4, 5],
-      mode: 'update_and_merge',
-    });
+    expect(resolveTargets(event)).toEqual({ kind: 'pull_requests', repo, numbers: [4, 5] });
   });
 
   it('handles incomplete or unassociated check suites', () => {

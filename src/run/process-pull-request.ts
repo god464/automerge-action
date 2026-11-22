@@ -1,17 +1,27 @@
 import type { Logger } from '@/actions/logger';
 import type { Config } from '@/config/config';
 import { decideMerge } from '@/domain/merge-decision';
-import { behindStatus, shouldProbeBehind, type BehindStatus } from '@/domain/merge-state';
+import {
+  behindStatus,
+  classifyMergeableState,
+  shouldProbeBehind,
+  type BehindStatus,
+} from '@/domain/merge-state';
 import type { MergeMethod } from '@/domain/methods';
-import type { PullRequestSnapshot, RepoRef } from '@/domain/pull-request';
+import {
+  compareHeadSpec,
+  type PullRequestSnapshot,
+  type RepoRef,
+  sameRepo,
+} from '@/domain/pull-request';
 import { decideUpdate, updateEligibility } from '@/domain/update-decision';
 import type { GitRunner } from '@/git/command';
 import { rebaseOntoBase } from '@/git/rebase';
 import type { GitHubClient, GitHubError } from '@/github/client';
 import { ok, type Result } from '@/result';
 
-import { MAX_PULL_REQUESTS_PER_RUN } from './limits';
-import { resolvePullRequestSnapshot } from './resolve-state';
+import { MAX_PULL_REQUESTS_PER_LIST } from './limits';
+import { resolvePullRequestSnapshot, resolveUpdateSnapshot } from './resolve-state';
 import type { RunResult } from './result';
 
 export interface ProcessDeps {
@@ -24,8 +34,41 @@ export interface ProcessDeps {
   readonly cloneUrl: (repoFullName: string) => string;
 }
 
+export interface ProcessOutcome {
+  readonly result: RunResult;
+  readonly mergedSnapshot: PullRequestSnapshot | null;
+}
+
+function skippedOutcome(): ProcessOutcome {
+  return { result: { result: 'skipped', pullRequestNumber: undefined }, mergedSnapshot: null };
+}
+
+async function updateForkBranch(
+  deps: ProcessDeps,
+  pullRequest: PullRequestSnapshot,
+): Promise<void> {
+  const result = await deps.client.updatePullRequestBranch({
+    repo: pullRequest.repo,
+    number: pullRequest.number,
+    expectedHeadSha: pullRequest.head.sha,
+  });
+  if (!result.ok) {
+    deps.logger.warning(
+      `Failed to request branch update for PR #${pullRequest.number}: ${result.error.kind}`,
+    );
+    return;
+  }
+  deps.logger.info(`Requested branch update for PR #${pullRequest.number}`);
+}
+
 async function applyUpdate(deps: ProcessDeps, pullRequest: PullRequestSnapshot): Promise<void> {
   if (deps.config.updateMethod === 'merge') {
+    const headRepo = pullRequest.head.repo;
+    if (headRepo != null && !sameRepo(headRepo, pullRequest.repo)) {
+      await updateForkBranch(deps, pullRequest);
+      return;
+    }
+
     const result = await deps.client.mergeBaseIntoHead({
       repo: pullRequest.repo,
       headRef: pullRequest.head.ref,
@@ -75,7 +118,7 @@ async function resolveBehind(
   const compare = await deps.client.compareCommits(
     pullRequest.repo,
     pullRequest.base.ref,
-    pullRequest.head.ref,
+    compareHeadSpec(pullRequest.repo, pullRequest.head),
   );
   if (!compare.ok) {
     deps.logger.warning(
@@ -163,13 +206,16 @@ async function applyMerge(
 async function updateThenMerge(
   deps: ProcessDeps,
   pullRequest: PullRequestSnapshot,
-): Promise<RunResult> {
+): Promise<ProcessOutcome> {
   const outcome = await maybeUpdate(deps, pullRequest);
   if (outcome === 'unknown') {
     deps.logger.warning(
       `Refusing to merge PR #${pullRequest.number} because its state relative to the base is unknown`,
     );
-    return { result: 'not_ready', pullRequestNumber: pullRequest.number };
+    return {
+      result: { result: 'not_ready', pullRequestNumber: pullRequest.number },
+      mergedSnapshot: null,
+    };
   }
 
   const current =
@@ -180,7 +226,10 @@ async function updateThenMerge(
     deps.logger.warning(
       `Failed to refresh PR #${pullRequest.number} after update: ${current.error.kind}`,
     );
-    return { result: 'not_ready', pullRequestNumber: pullRequest.number };
+    return {
+      result: { result: 'not_ready', pullRequestNumber: pullRequest.number },
+      mergedSnapshot: null,
+    };
   }
 
   const decision = decideMerge({
@@ -191,11 +240,15 @@ async function updateThenMerge(
   });
 
   if (decision.kind === 'ready') {
-    return applyMerge(deps, current.value, decision.method, decision.commitTitle);
+    const result = await applyMerge(deps, current.value, decision.method, decision.commitTitle);
+    return { result, mergedSnapshot: result.result === 'merged' ? current.value : null };
   }
   if (decision.kind === 'skip') {
     deps.logger.info(`Skipping merge for PR #${pullRequest.number}: ${decision.reason}`);
-    return { result: 'skipped', pullRequestNumber: pullRequest.number };
+    return {
+      result: { result: 'skipped', pullRequestNumber: pullRequest.number },
+      mergedSnapshot: null,
+    };
   }
 
   if (decision.reason === 'other') {
@@ -205,21 +258,24 @@ async function updateThenMerge(
   } else {
     deps.logger.info(`PR #${pullRequest.number} is not ready: ${decision.reason}`);
   }
-  return { result: 'not_ready', pullRequestNumber: pullRequest.number };
+  return {
+    result: { result: 'not_ready', pullRequestNumber: pullRequest.number },
+    mergedSnapshot: null,
+  };
 }
 
-async function updateOtherPullRequests(
+export async function updatePullRequestsByBase(
   deps: ProcessDeps,
-  merged: PullRequestSnapshot,
+  repo: RepoRef,
+  base: string,
+  excludeNumber?: number,
 ): Promise<void> {
-  const summaries = await deps.client.listOpenPullRequests(merged.repo, {
-    base: merged.base.ref,
-    perPage: MAX_PULL_REQUESTS_PER_RUN,
+  const summaries = await deps.client.listOpenPullRequests(repo, {
+    base,
+    perPage: MAX_PULL_REQUESTS_PER_LIST,
   });
   if (!summaries.ok) {
-    deps.logger.warning(
-      `Failed to list pull requests based on ${merged.base.ref}: ${summaries.error.kind}`,
-    );
+    deps.logger.warning(`Failed to list pull requests based on ${base}: ${summaries.error.kind}`);
     return;
   }
 
@@ -227,58 +283,74 @@ async function updateOtherPullRequests(
   let processed = 0;
 
   for (const pullRequest of summaries.value) {
-    if (pullRequest.number === merged.number || seen.has(pullRequest.number)) continue;
-    if (processed === MAX_PULL_REQUESTS_PER_RUN) break;
+    if (pullRequest.number === excludeNumber || seen.has(pullRequest.number)) continue;
+    if (processed === MAX_PULL_REQUESTS_PER_LIST) break;
 
     seen.add(pullRequest.number);
-    await processPullRequest(deps, merged.repo, pullRequest.number, 'update_only', pullRequest);
+    await processUpdateOnly(deps, repo, pullRequest.number, pullRequest);
     processed += 1;
   }
 
   if (processed === 0) {
-    deps.logger.debug(`No other open pull requests based on ${merged.base.ref}`);
+    deps.logger.debug(`No open pull requests based on ${base}`);
     return;
   }
-  deps.logger.info(`Processed ${processed} other pull request(s) based on ${merged.base.ref}`);
+  deps.logger.info(`Processed ${processed} pull request(s) based on ${base}`);
 }
 
-export async function processPullRequest(
+export async function processUpdateOnly(
   deps: ProcessDeps,
   repo: RepoRef,
   number: number,
-  mode: 'update_and_merge' | 'update_only',
   existingSnapshot?: PullRequestSnapshot,
-): Promise<RunResult> {
-  if (existingSnapshot != null && mode === 'update_only') {
+): Promise<ProcessOutcome> {
+  if (existingSnapshot != null) {
     const ineligible = updateEligibility(existingSnapshot, deps.config.updateLabels);
     if (ineligible != null) {
       deps.logger.info(`Skipping update for PR #${number}: ${ineligible}`);
-      return { result: 'skipped', pullRequestNumber: undefined };
+      return skippedOutcome();
     }
   }
 
   let snapshot: Result<PullRequestSnapshot, GitHubError>;
-  if (existingSnapshot != null && existingSnapshot.mergeableState != null) {
+  if (
+    existingSnapshot != null &&
+    existingSnapshot.mergeableState != null &&
+    existingSnapshot.mergeableState !== 'unknown'
+  ) {
     snapshot = ok(existingSnapshot);
-  } else if (mode === 'update_only') {
-    snapshot = await deps.client.getPullRequest(repo, number);
   } else {
-    snapshot = await resolvePullRequestSnapshot(deps, repo, number);
+    snapshot = await resolveUpdateSnapshot(deps, repo, number);
   }
 
   if (!snapshot.ok) {
     deps.logger.warning(`Failed to fetch PR #${number}: ${snapshot.error.kind}`);
-    return { result: 'skipped', pullRequestNumber: number };
+    return skippedOutcome();
   }
 
-  if (mode === 'update_only') {
-    await maybeUpdate(deps, snapshot.value);
-    return { result: 'skipped', pullRequestNumber: undefined };
+  const updateOutcome = await maybeUpdate(deps, snapshot.value);
+  if (
+    updateOutcome === 'skipped' &&
+    classifyMergeableState(snapshot.value).kind === 'unknown' &&
+    !shouldProbeBehind(snapshot.value)
+  ) {
+    deps.logger.warning(
+      `Mergeability still unknown for PR #${number} after 2 attempts; skipping update`,
+    );
+  }
+  return skippedOutcome();
+}
+
+export async function processUpdateAndMerge(
+  deps: ProcessDeps,
+  repo: RepoRef,
+  number: number,
+): Promise<ProcessOutcome> {
+  const snapshot = await resolvePullRequestSnapshot(deps, repo, number);
+  if (!snapshot.ok) {
+    deps.logger.warning(`Failed to fetch PR #${number}: ${snapshot.error.kind}`);
+    return { result: { result: 'skipped', pullRequestNumber: number }, mergedSnapshot: null };
   }
 
-  const result = await updateThenMerge(deps, snapshot.value);
-  if (result.result === 'merged') {
-    await updateOtherPullRequests(deps, snapshot.value);
-  }
-  return result;
+  return updateThenMerge(deps, snapshot.value);
 }

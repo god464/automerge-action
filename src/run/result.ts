@@ -7,9 +7,8 @@ export interface RunResult {
 
 export interface RunReport {
   readonly primary: RunResult;
-  readonly all: readonly RunResult[];
 }
 
 export function skippedReport(): RunReport {
-  return { primary: { result: 'skipped', pullRequestNumber: undefined }, all: [] };
+  return { primary: { result: 'skipped', pullRequestNumber: undefined } };
 }

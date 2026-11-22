@@ -63,17 +63,16 @@ describe('fetchUntilMergeBase', () => {
 
       const deps = { git, logger, now: Date.now, cloneUrl: (repoFullName: string) => repoFullName };
       expect(
-        await fetchUntilMergeBase(deps, workspace, 'main', 'br1', Date.now() + 10_000),
+        await fetchUntilMergeBase(deps, workspace, 'origin', 'main', 'br1', Date.now() + 10_000),
       ).toEqual(ok(base));
     });
   }, 15_000);
 
-  it('finds the earliest merge base across merge commits', async () => {
+  it('finds a common merge base across merge commits', async () => {
     await inTempDir(async (path) => {
       const origin = join(path, 'origin');
       await init(origin);
       await commit(origin, 'base %d', 10);
-      const base = await run(origin, ['rev-parse', 'HEAD']);
       await run(origin, ['branch', 'br1']);
       await commit(origin, 'main %d', 10);
       await run(origin, ['checkout', 'br1']);
@@ -88,16 +87,61 @@ describe('fetchUntilMergeBase', () => {
       await run(workspace, ['fetch', 'origin', 'main:refs/remotes/origin/main']);
 
       const deps = { git, logger, now: Date.now, cloneUrl: (repoFullName: string) => repoFullName };
-      expect(
-        await fetchUntilMergeBase(deps, workspace, 'main', 'br1', Date.now() + 10_000),
-      ).toEqual(ok(base));
+      const common = expectOk(
+        await fetchUntilMergeBase(deps, workspace, 'origin', 'main', 'br1', Date.now() + 10_000),
+      );
+      expect(common).toMatch(/^[0-9a-f]{40}$/);
+      await run(workspace, ['merge-base', '--is-ancestor', common, 'HEAD']);
+      await run(workspace, ['merge-base', '--is-ancestor', common, 'refs/remotes/origin/main']);
     });
   }, 15_000);
+
+  it('finds a common base when a merged parent has unrelated history', async () => {
+    await inTempDir(async (path) => {
+      const origin = join(path, 'origin');
+      await init(origin);
+      await commitFile(origin, 'base.txt', 'base');
+      const base = await run(origin, ['rev-parse', 'HEAD']);
+
+      await run(origin, ['checkout', '-b', 'feature']);
+      await commitFile(origin, 'feature.txt', 'feature');
+
+      await run(origin, ['checkout', '--orphan', 'unrelated']);
+      await run(origin, ['rm', '-rf', '.']);
+      await commitFile(origin, 'unrelated.txt', 'unrelated');
+
+      await run(origin, ['checkout', 'feature']);
+      await run(origin, [
+        'merge',
+        '--no-ff',
+        '--allow-unrelated-histories',
+        'unrelated',
+        '-m',
+        'merge unrelated',
+      ]);
+
+      const workspace = join(path, 'ws');
+      await run('.', ['clone', '--quiet', '--branch', 'feature', origin, workspace]);
+      await run(workspace, ['fetch', '--quiet', 'origin', 'main:refs/remotes/origin/main']);
+
+      const deps = { git, logger, now: Date.now, cloneUrl: () => '' };
+      expect(
+        await fetchUntilMergeBase(
+          deps,
+          workspace,
+          'origin',
+          'main',
+          'feature',
+          Date.now() + 10_000,
+        ),
+      ).toEqual(ok(base));
+    });
+  }, 20_000);
 
   it('times out when no common base can be found', async () => {
     const deps = { git, logger, now: Date.now, cloneUrl: (repoFullName: string) => repoFullName };
 
-    expect(await fetchUntilMergeBase(deps, '.', 'main', 'br1', 0)).toEqual({
+    expect(await fetchUntilMergeBase(deps, '.', 'origin', 'main', 'br1', 0)).toEqual({
       ok: false,
       error: { kind: 'timeout' },
     });
@@ -148,7 +192,7 @@ describe('shallow merge-base discovery', () => {
       const deps = { git: recordingGit, logger, now: Date.now, cloneUrl: () => '' };
 
       expect(
-        await fetchUntilMergeBase(deps, workspace, 'main', 'br1', Date.now() + 20_000),
+        await fetchUntilMergeBase(deps, workspace, 'origin', 'main', 'br1', Date.now() + 20_000),
       ).toEqual(ok(base));
 
       const deepens = calls.filter((args) => args[0] === 'fetch' && args.includes('--deepen'));
@@ -159,12 +203,11 @@ describe('shallow merge-base discovery', () => {
     });
   }, 30_000);
 
-  it('resolves a criss-cross history to its earliest merge base', async () => {
+  it('finds a common base in a criss-cross history', async () => {
     await inTempDir(async (path) => {
       const origin = join(path, 'origin');
       await init(origin);
       await commitFile(origin, 'base.txt', 'base');
-      const base = await run(origin, ['rev-parse', 'HEAD']);
 
       await run(origin, ['checkout', '-b', 'br1']);
       await commitFile(origin, 'br1.txt', 'br1');
@@ -187,9 +230,11 @@ describe('shallow merge-base discovery', () => {
       await run(workspace, ['fetch', '--quiet', 'origin', 'main:refs/remotes/origin/main']);
 
       const deps = { git, logger, now: Date.now, cloneUrl: () => '' };
-      expect(
-        await fetchUntilMergeBase(deps, workspace, 'main', 'br1', Date.now() + 20_000),
-      ).toEqual(ok(base));
+      const common = expectOk(
+        await fetchUntilMergeBase(deps, workspace, 'origin', 'main', 'br1', Date.now() + 20_000),
+      );
+      await run(workspace, ['merge-base', '--is-ancestor', common, 'HEAD']);
+      await run(workspace, ['merge-base', '--is-ancestor', common, 'refs/remotes/origin/main']);
     });
   }, 20_000);
 
@@ -224,7 +269,14 @@ describe('shallow merge-base discovery', () => {
 
       const deps = { git, logger, now: Date.now, cloneUrl: () => '' };
       expect(
-        await fetchUntilMergeBase(deps, workspace, 'unrelated', 'main', Date.now() + 20_000),
+        await fetchUntilMergeBase(
+          deps,
+          workspace,
+          'origin',
+          'unrelated',
+          'main',
+          Date.now() + 20_000,
+        ),
       ).toEqual({ ok: false, error: { kind: 'no_common_ancestor' } });
     });
   }, 20_000);
@@ -265,6 +317,7 @@ describe('shallow merge-base discovery', () => {
       const result = await fetchUntilMergeBase(
         deps,
         workspace,
+        'origin',
         'base-branch',
         'main',
         Date.now() + 20_000,
@@ -301,8 +354,8 @@ describe('rebaseOntoBase', () => {
       const result = await rebaseOntoBase(
         deps,
         pullRequest({
-          head: { ref: 'feature', sha: featureSha, repoFullName: 'owner/repo' },
-          base: { ref: 'main', sha: 'base-sha', repoFullName: 'owner/repo' },
+          head: { ref: 'feature', sha: featureSha, repo: { owner: 'owner', repo: 'repo' } },
+          base: { ref: 'main', sha: 'base-sha', repo: { owner: 'owner', repo: 'repo' } },
         }),
       );
 
@@ -310,6 +363,63 @@ describe('rebaseOntoBase', () => {
       expect(newSha).not.toBeNull();
       expect(newSha).not.toEqual(featureSha);
       expect(await run(origin, ['rev-parse', 'refs/heads/feature'])).toEqual(newSha);
+    });
+  }, 20_000);
+});
+
+describe('rebaseOntoBase fork targeting', () => {
+  it('rebases a fork branch onto the base repository', async () => {
+    await inTempDir(async (path) => {
+      const baseOrigin = join(path, 'base.git');
+      await mkdir(baseOrigin, { recursive: true });
+      await run(baseOrigin, ['init', '--bare']);
+
+      const seed = join(path, 'seed');
+      await run('.', ['clone', baseOrigin, seed]);
+      await run(seed, ['checkout', '-b', 'main']);
+      await commit(seed, 'base');
+      await run(seed, ['push', '-u', 'origin', 'main']);
+
+      const forkOrigin = join(path, 'fork.git');
+      await mkdir(forkOrigin, { recursive: true });
+      await run(forkOrigin, ['init', '--bare']);
+
+      const fork = join(path, 'fork');
+      await run('.', ['clone', forkOrigin, fork]);
+      await run(fork, ['fetch', baseOrigin, 'main:refs/remotes/base/main']);
+      await run(fork, ['checkout', '-b', 'main', 'refs/remotes/base/main']);
+      await run(fork, ['push', '-u', 'origin', 'main']);
+      await run(fork, ['checkout', '-b', 'feature']);
+      await commitFile(fork, 'feature.txt', 'feature');
+      await run(fork, ['push', '-u', 'origin', 'feature']);
+      const featureSha = await run(fork, ['rev-parse', 'HEAD']);
+
+      await run(seed, ['checkout', 'main']);
+      await commitFile(seed, 'main.txt', 'main moved');
+      await run(seed, ['push', 'origin', 'main']);
+      const baseSha = await run(seed, ['rev-parse', 'HEAD']);
+
+      const deps = {
+        git,
+        logger,
+        now: Date.now,
+        cloneUrl: (repoFullName: string) =>
+          repoFullName === 'alice/fork' ? forkOrigin : baseOrigin,
+      };
+      const result = await rebaseOntoBase(
+        deps,
+        pullRequest({
+          repo: { owner: 'owner', repo: 'base' },
+          head: { ref: 'feature', sha: featureSha, repo: { owner: 'alice', repo: 'fork' } },
+          base: { ref: 'main', sha: baseSha, repo: { owner: 'owner', repo: 'base' } },
+        }),
+      );
+
+      const newSha = expectOk(result);
+      expect(newSha).not.toBeNull();
+      expect(newSha).not.toEqual(featureSha);
+      expect(await run(forkOrigin, ['rev-parse', 'refs/heads/feature'])).toEqual(newSha);
+      await run(forkOrigin, ['merge-base', '--is-ancestor', baseSha, newSha ?? '']);
     });
   }, 20_000);
 });
@@ -387,6 +497,24 @@ describe('createGitRunner', () => {
     });
   });
 
+  it('terminates a child that outlives the git leader on timeout', async () => {
+    if (process.platform === 'win32') return;
+
+    const dir = await mkdtemp(join(tmpdir(), 'automerge-leak-'));
+    const started = Date.now();
+
+    try {
+      const result = await git.run(dir, ['-c', "alias.leak=!sh -c 'sleep 3 &'", 'leak'], {
+        timeoutMs: 500,
+      });
+
+      expect(Date.now() - started).toBeLessThan(2000);
+      expect(result).toMatchObject({ ok: false, error: { kind: 'timed_out', timeoutMs: 500 } });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('terminates the whole process tree when a command times out', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'automerge-timeout-'));
     const pidFile = join(dir, 'pid');
@@ -435,7 +563,7 @@ describe('fetchUntilMergeBase deadlines', () => {
     };
     const deps = { git: fakeGit, logger, now: () => clock, cloneUrl: () => '' };
 
-    const result = await fetchUntilMergeBase(deps, '.', 'main', 'br1', 1000);
+    const result = await fetchUntilMergeBase(deps, '.', 'origin', 'main', 'br1', 1000);
 
     expect(result).toEqual({ ok: false, error: { kind: 'timeout' } });
     expect(calls.map((call) => call.args[0])).toEqual(['merge-base', 'rev-parse', 'fetch']);
@@ -452,7 +580,7 @@ describe('fetchUntilMergeBase deadlines', () => {
     };
     const deps = { git: fakeGit, logger, now: () => 0, cloneUrl: () => '' };
 
-    expect(await fetchUntilMergeBase(deps, '.', 'main', 'br1', 1000)).toEqual({
+    expect(await fetchUntilMergeBase(deps, '.', 'origin', 'main', 'br1', 1000)).toEqual({
       ok: false,
       error: { kind: 'no_common_ancestor' },
     });
@@ -464,7 +592,7 @@ describe('fetchUntilMergeBase deadlines', () => {
     };
     const deps = { git: fakeGit, logger, now: () => 0, cloneUrl: () => '' };
 
-    expect(await fetchUntilMergeBase(deps, '.', 'main', 'br1', 1000)).toEqual({
+    expect(await fetchUntilMergeBase(deps, '.', 'origin', 'main', 'br1', 1000)).toEqual({
       ok: false,
       error: { kind: 'timeout' },
     });

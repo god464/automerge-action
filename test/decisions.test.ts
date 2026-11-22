@@ -116,10 +116,7 @@ describe('decideUpdate', () => {
     expect(updateEligibility(pullRequest({ state: 'closed' }), filter)).toEqual('not_open');
     expect(updateEligibility(pullRequest({ merged: true }), filter)).toEqual('already_merged');
     expect(
-      updateEligibility(
-        pullRequest({ head: { ref: 'feature', sha: 'sha', repoFullName: null } }),
-        filter,
-      ),
+      updateEligibility(pullRequest({ head: { ref: 'feature', sha: 'sha', repo: null } }), filter),
     ).toEqual('head_repo_missing');
   });
 
@@ -201,7 +198,7 @@ describe('decideMerge', () => {
     ).toEqual({ kind: 'skip', reason: 'already_merged' });
     expect(
       decideMerge({
-        pullRequest: pullRequest({ head: { ref: 'feature', sha: 'sha', repoFullName: null } }),
+        pullRequest: pullRequest({ head: { ref: 'feature', sha: 'sha', repo: null } }),
         filter,
         method: 'merge',
         commitMessage: 'automatic',

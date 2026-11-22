@@ -84,7 +84,8 @@ merge commit and squash-merge the pull request.
 | `pull-request-number` | number, or `0`                                   | First affected pull request; `0` for ignored, unsupported, or update-only events. |
 
 When an event resolves to multiple pull requests, they are processed in order
-and the first merge result is exposed. The full list is in the logs.
+and the first merge result is exposed. Each pull request is logged as it is
+processed.
 
 ## Behavior
 
@@ -101,12 +102,21 @@ without being merged, and merged without being updated.
 | `dirty`, `draft`, `unknown`, or missing | No update.                                          |
 
 With `update-method: merge` the action merges the base branch into the pull
-request head through the API. With `rebase` it clones the head repository,
-fetches the base, rebases, and force-pushes with `--force-with-lease`.
+request head through the API. Fork pull requests use GitHub's pull request
+branch update endpoint with the expected head SHA, so a same-named branch in
+the base repository is never touched. With `rebase` it clones the head
+repository, fetches the base branch from the base repository, rebases, and
+force-pushes with `--force-with-lease` pinned to the snapshot head SHA.
 
-Compare requests are fail-closed: if GitHub's compare API fails, returns an
-invalid response, or the result cannot be interpreted, the pull request is not
-updated and the merge is refused for that run.
+Compare requests are fail-closed when the update decision requires one: if
+GitHub's compare API fails, returns an invalid response, or the result cannot
+be interpreted, the pull request is not updated and the merge is refused for
+that run. The probe is part of the update decision; if `update-labels` do not
+match, no compare is made and the merge decision uses GitHub's mergeable state.
+
+Update-only runs fetch mergeability once and retry once after 1 second. If it
+is still unknown and cannot be probed with compare, the pull request is skipped
+with a warning; a later event may retry.
 
 After an update the pull request is refreshed. If it is not ready then, the
 result is `not_ready`; the next check completion can merge it. A refresh that
@@ -124,7 +134,7 @@ refreshed snapshot that GitHub reports as mergeable may continue to merge.
 | `behind`             | `not_ready`. Update first.                                                  |
 | `dirty`              | `not_ready`. Merge conflict.                                                |
 | `draft`              | `not_ready`.                                                                |
-| `unknown` or missing | Retry up to 3 times, 2 seconds apart, then `not_ready`.                     |
+| `unknown` or missing | Up to 3 attempts (2 retries), 2 seconds apart, then `not_ready`.            |
 | any other value      | `not_ready` with a warning.                                                 |
 
 `mergeable === false` and `draft === true` take precedence over the state. A
@@ -132,14 +142,16 @@ merge also requires `mergeable === true`: when GitHub returns `mergeable: null`,
 ready-looking states such as `clean` and `unstable` are treated as unknown and
 retried; states that are already definitively not ready stay not ready.
 
-`unstable` is probed with the compare API before merging. A failed compare is
-not treated as up to date and produces `not_ready`; when the comparison shows
-the branch is behind, the action updates it first and then uses the refreshed
-state.
+`unstable` is probed with the compare API before merging when the pull request
+is eligible for update. A failed compare is not treated as up to date and
+produces `not_ready`; when the comparison shows the branch is behind, the
+action updates it first and then uses the refreshed state. If `update-labels`
+exclude the pull request, no probe is made and the merge decision uses GitHub's
+`mergeable_state`.
 
-`merge_failed` is emitted only when the merge API call fails. A merge race is
-handled by re-reading the pull request; if another actor merged it, the result
-is `merged`.
+`merge_failed` is emitted when the merge API call fails or returns
+`merged: false`. A merge race is handled by re-reading the pull request; if
+another actor merged it, the result is `merged`.
 
 After a successful merge, the action lists up to 10 open pull requests based on
 the same base branch, excludes the merged pull request, and runs update-only for
@@ -147,15 +159,17 @@ each. The bound is an internal constant.
 
 ### Events
 
-| Event                 | Accepted                                                                                              | Target                                                          |
-| --------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `pull_request`        | `labeled`, `unlabeled`, `synchronize`, `opened`, `edited`, `ready_for_review`, `reopened`, `unlocked` | Payload pull request; update and merge.                         |
-| `pull_request_review` | `submitted` with `review.state = approved`                                                            | Reviewed pull request; update and merge.                        |
-| `workflow_run`        | `completed` + `conclusion = success`; triggered by `pull_request`                                     | Associated pull requests, or commit SHA; update and merge.      |
-| `workflow_run`        | `completed` + `conclusion = success`; triggered by `push`                                             | Open pull requests whose base is `head_branch`; update only.    |
-| `check_suite`         | `completed` + `conclusion = success`                                                                  | Associated pull requests, or commit SHA; update and merge.      |
-| `status`              | `state = success`                                                                                     | Pull requests associated with the commit SHA; update and merge. |
-| anything else         | –                                                                                                     | Output `skipped` and emit a warning.                            |
+| Event                          | Accepted                                                                                              | Target                                                          |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `pull_request`                 | `labeled`, `unlabeled`, `synchronize`, `opened`, `edited`, `ready_for_review`, `reopened`, `unlocked` | Payload pull request; update and merge.                         |
+| `pull_request_target`          | same as `pull_request`                                                                                | Payload pull request; update and merge.                         |
+| `pull_request_review`          | `submitted` with `review.state = approved`                                                            | Reviewed pull request; update and merge.                        |
+| `workflow_run`                 | `completed` + `conclusion = success`; triggered by `pull_request`                                     | Associated pull requests, or commit SHA; update and merge.      |
+| `workflow_run`                 | `completed` + `conclusion = success`; triggered by `push`                                             | Open pull requests whose base is `head_branch`; update only.    |
+| `check_suite`                  | `completed` + `conclusion = success`                                                                  | Associated pull requests, or commit SHA; update and merge.      |
+| `status`                       | `state = success`                                                                                     | Pull requests associated with the commit SHA; update and merge. |
+| `workflow_run` / `check_suite` | not `completed`, or `completed` with `conclusion != success`                                          | Output `not_ready`.                                             |
+| anything else                  | –                                                                                                     | Output `skipped` and emit a warning.                            |
 
 `workflow_run` and `check_suite` payloads must contain a valid `pull_requests`
 array. A missing, non-array, or partially malformed list is reported as a
@@ -180,7 +194,10 @@ Use `${{ secrets.GITHUB_TOKEN }}` unless one of these applies:
 - Bot-updated pull requests may produce workflow runs in an approval-required
   state. Use a GitHub App/PAT token for unattended CI, or approve runs manually.
 - A `pull_request` event from a fork has a read-only token. Prefer
-  `workflow_run` or a PAT/App token.
+  `workflow_run`, `pull_request_target`, or a PAT/App token.
+- `pull_request_target` runs in the base repository context with a
+  write-capable token. Do not check out untrusted pull request code in a
+  `pull_request_target` workflow.
 
 The token is passed to git through a per-process HTTP authorization header. It
 is not embedded in clone URLs or command arguments.
