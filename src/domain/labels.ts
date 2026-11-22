@@ -16,7 +16,7 @@ export function parseLabelFilter(
 ): ParsedLabelFilter {
   const entries = [
     ...new Set(
-      (value == null ? defaultValue : value)
+      (value ?? defaultValue)
         .split(',')
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0),

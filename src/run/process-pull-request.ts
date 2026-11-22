@@ -187,7 +187,9 @@ async function applyMerge(
     return { result: 'merged', pullRequestNumber: pullRequest.number };
   }
 
-  if (!merged.ok) {
+  if (merged.ok) {
+    deps.logger.warning(`GitHub did not merge PR #${pullRequest.number}`);
+  } else {
     deps.logger.warning(
       `Failed to merge PR #${pullRequest.number}: ${merged.error.kind} ${merged.error.message}`,
     );
@@ -196,8 +198,6 @@ async function applyMerge(
       deps.logger.info(`PR #${pullRequest.number} was already merged`);
       return { result: 'merged', pullRequestNumber: pullRequest.number };
     }
-  } else {
-    deps.logger.warning(`GitHub did not merge PR #${pullRequest.number}`);
   }
 
   return { result: 'merge_failed', pullRequestNumber: pullRequest.number };
@@ -313,11 +313,7 @@ export async function processUpdateOnly(
   }
 
   let snapshot: Result<PullRequestSnapshot, GitHubError>;
-  if (
-    existingSnapshot != null &&
-    existingSnapshot.mergeableState != null &&
-    existingSnapshot.mergeableState !== 'unknown'
-  ) {
+  if (existingSnapshot?.mergeableState != null && existingSnapshot.mergeableState !== 'unknown') {
     snapshot = ok(existingSnapshot);
   } else {
     snapshot = await resolveUpdateSnapshot(deps, repo, number);

@@ -1,4 +1,4 @@
-import * as core from '@actions/core';
+import { debug, info, warning } from '@actions/core';
 
 export interface Logger {
   readonly debug: (message: string) => void;
@@ -7,7 +7,7 @@ export interface Logger {
 }
 
 export const actionsLogger: Logger = {
-  debug: (message) => core.debug(message),
-  info: (message) => core.info(message),
-  warning: (message) => core.warning(message),
+  debug: (message) => debug(message),
+  info: (message) => info(message),
+  warning: (message) => warning(message),
 };

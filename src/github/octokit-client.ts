@@ -252,8 +252,7 @@ function isRateLimited(
 
 function toGitHubError(error: unknown): GitHubError {
   const record = recordOf(error);
-  const status =
-    record != null && typeof record['status'] === 'number' ? (record['status'] as number) : null;
+  const status = record != null && typeof record['status'] === 'number' ? record['status'] : null;
   const message =
     error instanceof Error
       ? error.message
