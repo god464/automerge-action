@@ -4,4 +4,5 @@ export default defineConfig({
   entry: { index: 'src/main.ts' },
   minify: true,
   fixedExtension: false,
+  deps: { alwaysBundle: ['@actions/core', '@actions/github'] },
 });
