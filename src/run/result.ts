@@ -1,4 +1,4 @@
-export type MergeResult = 'skipped' | 'not_ready' | 'merge_failed' | 'merged';
+type MergeResult = 'skipped' | 'not_ready' | 'merge_failed' | 'merged';
 
 export interface RunResult {
   readonly result: MergeResult;

@@ -5,7 +5,7 @@ import { err, ok, type Result } from '@/result';
 import type { GitError, GitOutput, GitRunOptions, GitRunner } from './command';
 import { type TempDirError, withTempDir } from './tmpdir';
 
-export const FETCH_DEPTH = '10';
+const FETCH_DEPTH = '10';
 export const REBASE_TIMEOUT_MS = 5 * 60_000;
 
 export type RebaseError =

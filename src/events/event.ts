@@ -78,7 +78,7 @@ export interface StatusEvent {
   readonly repo: RepoRef;
 }
 
-export interface UnsupportedEvent {
+interface UnsupportedEvent {
   readonly kind: 'unsupported';
   readonly eventName: string;
 }

@@ -20,7 +20,7 @@ export const INPUT_NAMES = [
 
 export type ActionInputs = Readonly<Record<string, string | undefined>>;
 
-export interface LabelConflict {
+interface LabelConflict {
   readonly input: 'merge-labels' | 'update-labels';
   readonly label: string;
 }

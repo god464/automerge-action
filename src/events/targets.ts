@@ -11,7 +11,7 @@ import type {
   WorkflowRunEvent,
 } from './event';
 
-export const RELEVANT_PULL_REQUEST_ACTIONS = [
+const RELEVANT_PULL_REQUEST_ACTIONS = [
   'labeled',
   'unlabeled',
   'synchronize',

@@ -4,9 +4,9 @@ import type { PullRequestSnapshot, RepoRef } from '@/domain/pull-request';
 import type { GitHubClient, GitHubError } from '@/github/client';
 import { ok, type Result } from '@/result';
 
-export const UNKNOWN_STATE_ATTEMPTS = 3;
-export const UNKNOWN_STATE_RETRY_DELAY_MS = 2000;
-export const UPDATE_ONLY_RETRY_DELAY_MS = 1000;
+const UNKNOWN_STATE_ATTEMPTS = 3;
+const UNKNOWN_STATE_RETRY_DELAY_MS = 2000;
+const UPDATE_ONLY_RETRY_DELAY_MS = 1000;
 
 export interface ResolveStateDeps {
   readonly client: GitHubClient;

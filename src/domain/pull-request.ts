@@ -26,7 +26,7 @@ export function compareHeadSpec(baseRepo: RepoRef, head: BranchRef): string {
     : `${head.repo.owner}:${head.ref}`;
 }
 
-export type PullRequestState = 'open' | 'closed';
+type PullRequestState = 'open' | 'closed';
 
 export type MergeableState =
   | 'clean'

@@ -15,7 +15,7 @@ import { ok, type Result } from '@/result';
 
 import { pullRequest } from './factories';
 
-export interface FakeClientCalls {
+interface FakeClientCalls {
   readonly getPullRequest: { readonly repo: RepoRef; readonly number: number }[];
   readonly listOpenPullRequests: { readonly repo: RepoRef; readonly filter: PullRequestFilter }[];
   readonly listPullRequestsForCommit: { readonly repo: RepoRef; readonly sha: string }[];

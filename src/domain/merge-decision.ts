@@ -3,9 +3,9 @@ import { classifyMergeableState, type NotReadyReason } from './merge-state';
 import type { MergeCommitMessage, MergeMethod } from './methods';
 import type { PullRequestSnapshot } from './pull-request';
 
-export type MergeSkipReason = 'not_open' | 'already_merged' | 'head_repo_missing' | LabelSkipReason;
+type MergeSkipReason = 'not_open' | 'already_merged' | 'head_repo_missing' | LabelSkipReason;
 
-export type MergeNotReadyReason = NotReadyReason | 'unknown';
+type MergeNotReadyReason = NotReadyReason | 'unknown';
 
 export type MergeDecision =
   | {
