@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.7](https://github.com/god464/automerge-action/compare/v1.0.6...v1.0.7) (2026-11-27)
+
+
+### Bug Fixes
+
+* drop unused export ([0cd9d45](https://github.com/god464/automerge-action/commit/0cd9d4591b545ce2e19363c11f8b5520b7d169f6))
+
 ## [1.0.6](https://github.com/god464/automerge-action/compare/v1.0.5...v1.0.6) (2026-11-22)
 
 ### Bug Fixes
